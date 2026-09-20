@@ -166,11 +166,26 @@ Arkadaşlara "çift tıkla" dosyası vereceksen:
 1. Windows makinesinde `pip install pyinstaller`
 2. Bu klasörde `exe-yap.bat` çalıştır (veya terminalde):
    ```bat
-   pyinstaller --onefile --noconsole --name Pong ^
+   pyinstaller --onefile --noconsole --name Pong --hidden-import brain ^
        --add-data "pong.html;." --add-data "terminator_music.webm;." server.py
    ```
-3. Çıktı `dist\Pong\Pong.exe` olur. Bu exe'yi + (aynı klasörde) `brain.py`
-   arkadaşlarına gönder. `Pong.exe` çift tıkla sunucuyu başlatır, tarayıcı açılır.
+3. Çıktı **`dist\Pong.exe`** olur (tek dosya — `brain.py` ayrı göndermen gerekmez).
+   Bu exe'yi arkadaşlarına gönder; çift tıklayınca sunucu başlar, tarayıcı
+   `http://localhost:8077/` açılır. AI hafızası `Pong.exe`'nin yanına
+   `ai_memory.json` olarak yazılır.
+
+### EXE'de "not found" (404) çıkarsa
+Tarayıcıda `http://localhost:8077/` açıldığında `not found: /pong.html (aranan
+dizinler: ...)` görürsen, bu sunucunun **çalıştığının** kanıtıdır; `pong.html`
+içine gömülmemiş demektir. `exe-yap.bat` şu `--add-data` satırlarını içerir:
+```bat
+--add-data "pong.html;." --add-data "terminator_music.webm;."
+```
+Bu iki satırı silip exe'yi yeniden derle (veya `pong.html` + `terminator_music.webm`
+dosyalarını `Pong.exe`'nin yanına koy). Ayrıca tarayıcı adres çubuğunda
+`http://localhost:8077/pong.html` ile de deneyebilirsin — doğrudan dosya
+yoluyla 200 alıyorsan sorun `--add-data`'dır; almıyorsan exe içinde `pong.html`
+yok demektir.
 
 > **Neden exe bu Linux sunucudan verilmedi?** PyInstaller hedef OS'te derler
 > (Windows `.exe`'i Windows'ta, Linux `.bin`'i Linux'ta). Bu makine Linux olduğu
