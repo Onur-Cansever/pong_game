@@ -38,3 +38,14 @@ python3 selfplay.py 5   # her modu 5'er maç kendinden oynatır
 ## Dosyalar
 
 - `ai_memory.json` — AI'nın kalıcı öğrenme durumu; `.gitignore`'lanmıştır (her kurulumda temiz başlar).
+
+### Haritalar
+
+| Tuş | Harita | Özellik |
+|-----|--------|---------|
+| 1 | Klasik | Orijinal saha |
+| 2 | Boşluk | Yıldız alanı + gezegen |
+| 3 | Yer Altı | Ortada metal daire engel — topa çarpıp sektirir (beyin bunu tahmine katar) |
+| 4 | Sanayi | Parlayan çelik barlar |
+
+Seçim: **1-4** tuşları, **Q/E** ile döngü ya da ekran altı butonlar. Son seçim tarayıcıda kalıcı.
