@@ -65,14 +65,35 @@ const BALL_R = 8, BALL_SPEED0 = 6, BALL_ACC = 1.3, BALL_MAX = 17;
 const ZONES = 10, ZH = H / ZONES;
 
 /* ================= HARİTALAR ================= */
-// Yer Altı'da ortada metal daire engel: topa çarpıp sektirir (beyin bunu tahmine katar).
+// Engel tipleri:
+//  - statik: {x, y, r}
+//  - orbit : {r, move:{type:'orbit', cx, cy, R, w, a0}}  -> dairesel yörünge (Boşluk: asteroid)
+//  - osc   : {r, x, move:{type:'osc', x, y0, amp, w, ph}} -> dikey salınım (Sanayi: piston)
 const MAPS = [
   { name: 'Klasik',   obstacles: [] },
-  { name: 'Boşluk',   obstacles: [] },
+  { name: 'Boşluk',   obstacles: [
+      { r: 30, x: W/2 + 150, y: H/2, move: { type: 'orbit', cx: W/2, cy: H/2, R: 150, w: 0.018, a0: 0 } },
+  ]},
   { name: 'Yer Altı', obstacles: [{ x: W / 2, y: H / 2, r: 56 }] },
-  { name: 'Sanayi',   obstacles: [] },
+  { name: 'Sanayi',   obstacles: [
+      { r: 30, x: 250, y: H/2, move: { type: 'osc', x: 250, y0: H/2, amp: 140, w: 0.030, ph: 0 } },
+      { r: 30, x: 550, y: H/2, move: { type: 'osc', x: 550, y0: H/2, amp: 140, w: 0.030, ph: Math.PI } },
+  ]},
 ];
 let mapIdx = 0;
+let obA = [], obPh = [];   // hareketli engellerin fazı (orbit açısı / osc faz)
+function syncObstaclePhase(){
+  obA  = MAPS[mapIdx].obstacles.map(o => (o.move && o.move.type === 'orbit' ? o.move.a0 : 0));
+  obPh = MAPS[mapIdx].obstacles.map(o => (o.move && o.move.type === 'osc'   ? o.move.ph : 0));
+}
+function updateObstacles(dtF){
+  MAPS[mapIdx].obstacles.forEach((ob, i) => {
+    const m = ob.move;
+    if (!m) return;
+    if (m.type === 'orbit') { obA[i] += m.w * dtF; ob.x = m.cx + m.R * Math.cos(obA[i]); ob.y = m.cy + m.R * Math.sin(obA[i]); }
+    else { obPh[i] += m.w * dtF; ob.x = m.x; ob.y = m.y0 + m.amp * Math.sin(obPh[i]); }
+  });
+}
 
 let state = 'ready';
 let scoreP = 0, scoreA = 0;
@@ -98,6 +119,7 @@ const lerp  = (a,b,t) => a + (b - a) * t;
 const mapBtns = [0,1,2,3].map(i => document.getElementById('mapBtn' + i));
 function setMap(i){
   mapIdx = clamp(i, 0, MAPS.length - 1);
+  syncObstaclePhase();
   localStorage.setItem('pong_map', String(mapIdx));
   mapBtns.forEach((b, j) => {
     b.style.background = (j === mapIdx) ? '#2a3a5a' : '';
@@ -258,7 +280,13 @@ async function askBrain(dtMs){
     missed_player: missedFlag, dtMs: dtMs,
     diff: diff,
     term: termMode,
-    obstacles: MAPS[mapIdx].obstacles,   // harita engelleri (beyin tahmine katar)
+    // Harita engelleri: statik {x,y,r} veya hareketli + güncel faz (beyin simülasyona katar)
+    obstacles: MAPS[mapIdx].obstacles.map((o,i) => {
+      const b = {x:o.x, y:o.y, r:o.r};
+      if (o.move && o.move.type === 'orbit') { b.move = {type:'orbit', ...o.move, a: obA[i]}; }
+      if (o.move && o.move.type === 'osc')   { b.move = {type:'osc', ...o.move, ph: obPh[i]}; }
+      return b;
+    }),
   };
   missedFlag = false;
   try {
@@ -296,14 +324,24 @@ function localBrain(dtMs){
     const dist = (ai.x - BALL_R) - ball.x;
     if (dist < engage) {
       let x=ball.x, y=ball.y, vx=ball.vx, vy=ball.vy;
-      const obs = MAPS[mapIdx].obstacles;
+      // Harita engelleri: hareketlilerin fazı da adım adım ilerletilir (beyinle aynı)
+      const src = MAPS[mapIdx].obstacles;
+      const obs = src.map((o, i) => {
+        const c = { x:o.x, y:o.y, r:o.r, _m:o.move || null };
+        if (c._m && c._m.type === 'orbit') c._a = obA[i];
+        if (c._m && c._m.type === 'osc')   c._p = obPh[i];
+        return c;
+      });
       for (let i=0;i<500 && x<ai.x-BALL_R;i++){
         x+=vx; y+=vy;
         if(y<BALL_R||y>H-BALL_R) vy=-vy;
-        for (const ob of obs) {
-          const dx=x-ob.x, dy=y-ob.y, rr=ob.r+BALL_R, d2=dx*dx+dy*dy;
+        for (const c of obs) {
+          const m=c._m;
+          if (m){ if (m.type==='orbit'){ c._a+=m.w; c.x=m.cx+m.R*Math.cos(c._a); c.y=m.cy+m.R*Math.sin(c._a); }
+                 else { c._p+=m.w; c.y=m.y0+m.amp*Math.sin(c._p); } }
+          const dx=x-c.x, dy=y-c.y, rr=c.r+BALL_R, d2=dx*dx+dy*dy;
           if (d2<rr*rr){ const d=Math.sqrt(d2)||0.001, nx=dx/d, ny=dy/d;
-            x=ob.x+nx*rr; y=ob.y+ny*rr;
+            x=c.x+nx*rr; y=c.y+ny*rr;
             const dot=vx*nx+vy*ny; vx-=2*dot*nx; vy-=2*dot*ny; }
         }
       }
@@ -529,17 +567,34 @@ function drawIndustry(now){
   ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
 }
 function drawObstacles(now){
+  // Önce izler: orbit -> kesik yörünge halkası, osc -> dikey ray
+  ctx.save();
+  for (const ob of MAPS[mapIdx].obstacles){
+    const m = ob.move;
+    if (!m) continue;
+    ctx.strokeStyle = 'rgba(150,170,200,0.14)';
+    ctx.lineWidth = 2;
+    if (m.type === 'orbit'){
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath(); ctx.arc(m.cx, m.cy, m.R, 0, Math.PI*2); ctx.stroke();
+    } else if (m.type === 'osc'){
+      ctx.beginPath(); ctx.moveTo(m.x, m.y0 - m.amp); ctx.lineTo(m.x, m.y0 + m.amp); ctx.stroke();
+    }
+  }
+  ctx.restore();
   for (const ob of MAPS[mapIdx].obstacles) {
     ctx.save();
+    const isMove = !!ob.move;
     const g = ctx.createRadialGradient(ob.x-ob.r*0.3, ob.y-ob.r*0.3, 4, ob.x, ob.y, ob.r);
     g.addColorStop(0, '#4a5560'); g.addColorStop(0.7, '#232a31'); g.addColorStop(1, '#0e1114');
-    ctx.shadowColor = '#4fe3ff'; ctx.shadowBlur = 12;
+    ctx.shadowColor = isMove ? '#ff5d7d' : '#4fe3ff'; ctx.shadowBlur = 12;
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ob.x, ob.y, ob.r, 0, Math.PI*2); ctx.fill();
     ctx.shadowBlur = 0;
     ctx.strokeStyle = 'rgba(140,160,180,0.35)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(ob.x, ob.y, ob.r-4, 0, Math.PI*2); ctx.stroke();
-    for (let i = 0; i < 8; i++) {         // dönen perçinler
-      const a = i/8*Math.PI*2 + now/4000;
+    const spin = isMove ? now/900 : now/4000;
+    for (let i = 0; i < 8; i++) {         // dönen perçinler (hareketli daha hızlı)
+      const a = i/8*Math.PI*2 + spin;
       ctx.fillStyle = 'rgba(160,180,200,0.4)';
       ctx.beginPath(); ctx.arc(ob.x+Math.cos(a)*(ob.r-10), ob.y+Math.sin(a)*(ob.r-10), 2.4, 0, Math.PI*2); ctx.fill();
     }
@@ -624,6 +679,8 @@ function render(){
   else if (state === 'gameover') overlay(winner + ' KAZANDI', 'Yeniden: SPACE / R');
 }
 function loop(now){
+  const dtMs = Math.min(50, now - (loop._last || now)); loop._last = now;
+  updateObstacles(dtMs / 16.667);   // engel animasyonu her durumda
   update(now);
   render();
   requestAnimationFrame(loop);

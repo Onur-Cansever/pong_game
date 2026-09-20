@@ -160,6 +160,7 @@ def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y, obstacles=None)
     x = AI_FACE_X - BALL_R
     y = ball_y
     obs = obstacles or []
+    st = _init_ob_states(obs)
     for _ in range(600):
         x -= nvx
         y += nvy
@@ -167,16 +168,8 @@ def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y, obstacles=None)
             y = BALL_R; nvy = abs(nvy)
         elif y > H - BALL_R:
             y = H - BALL_R; nvy = -abs(nvy)
-        for ob in obs:
-            dx, dy = x - ob["x"], y - ob["y"]
-            rr = ob["r"] + BALL_R
-            d2 = dx*dx + dy*dy
-            if d2 < rr*rr:
-                d = math.sqrt(d2) or 0.001
-                nx, ny = dx/d, dy/d
-                x = ob["x"] + nx*rr; y = ob["y"] + ny*rr
-                dot = nvx*nx + nvy*ny
-                nvx -= 2*dot*nx; nvy -= 2*dot*ny
+        _step_obs_states(st, obs)
+        x, y, nvx, nvy = _collide_obs(x, y, nvx, nvy, obs, st)
         if x <= PLAYER_FACE_X:
             return y
     return y
@@ -207,11 +200,60 @@ def _aim_shot(ball_x, ball_y, vx, vy, speed, P, obstacles=None):
     # raket y (üst köşe) = merkez - PAD_H/2
     return clamp(best_y - PAD_H / 2, 0, H - PAD_H), z
 
+# ---- Engel simülasyonu: adım başına engel konumlarını ilerlet (istemciyle aynı) ----
+def _ob_pos(ob, state_i):
+    """state_i: [a, ph] dizisi (orbit açısı, osc fazı). Ob'ün o adımdaki merkezi."""
+    m = ob.get("move")
+    if not m:
+        return ob["x"], ob["y"]
+    if m["type"] == "orbit":
+        a = state_i[0]
+        return m["cx"] + m["R"] * math.cos(a), m["cy"] + m["R"] * math.sin(a)
+    if m["type"] == "osc":
+        return m["x"], m["y0"] + m["amp"] * math.sin(state_i[1])
+    return ob["x"], ob["y"]
+
+def _init_ob_states(obs):
+    """Engellerin başlangıç faz durumu (istemciden gelen güncel değerler)."""
+    a, p = [], []
+    for o in obs:
+        m = o.get("move") or {}
+        a.append(float(m.get("a", m.get("a0", 0))))
+        p.append(float(m.get("ph", 0)))
+    return [a, p]
+
+def _step_obs_states(st, obs):
+    """Her adım: fazları ilerlet (1 kare = w kadar)."""
+    for i, o in enumerate(obs):
+        m = o.get("move")
+        if not m:
+            continue
+        if m["type"] == "orbit":
+            st[0][i] += m["w"]
+        elif m["type"] == "osc":
+            st[1][i] += m["w"]
+
+def _collide_obs(x, y, vx, vy, obs, st):
+    """(x,y,vx,vy) engel çarpışmalarını çözer; yeni (x,y,vx,vy) döner."""
+    for i, ob in enumerate(obs):
+        ox, oy = _ob_pos(ob, [st[0][i], st[1][i]])
+        dx, dy = x - ox, y - oy
+        rr = ob["r"] + BALL_R
+        d2 = dx*dx + dy*dy
+        if d2 < rr*rr:
+            d = math.sqrt(d2) or 0.001
+            nx, ny = dx/d, dy/d
+            x = ox + nx*rr; y = oy + ny*rr
+            dot = vx*nx + vy*ny
+            vx -= 2*dot*nx; vy -= 2*dot*ny
+    return x, y, vx, vy
+
 # ---- Yörünge tahmini (top sağa gidiyorsa; harita engellerini de taklit eder) ----
 def predict_y(target_x, ball_x, ball_y, vx, vy, obstacles=None):
     if vx <= 0:
         return H / 2
     obs = obstacles or []
+    st = _init_ob_states(obs)
     x, y = ball_x, ball_y
     for _ in range(900):
         x += vx; y += vy
@@ -219,17 +261,8 @@ def predict_y(target_x, ball_x, ball_y, vx, vy, obstacles=None):
             y = BALL_R; vy = abs(vy)
         elif y > H - BALL_R:
             y = H - BALL_R; vy = -abs(vy)
-        # Daire engeller: top normal boyunca seker (istemciyle aynı fizik)
-        for ob in obs:
-            dx, dy = x - ob["x"], y - ob["y"]
-            rr = ob["r"] + BALL_R
-            d2 = dx*dx + dy*dy
-            if d2 < rr*rr:
-                d = math.sqrt(d2) or 0.001
-                nx, ny = dx/d, dy/d
-                x = ob["x"] + nx*rr; y = ob["y"] + ny*rr
-                dot = vx*nx + vy*ny
-                vx -= 2*dot*nx; vy -= 2*dot*ny
+        _step_obs_states(st, obs)
+        x, y, vx, vy = _collide_obs(x, y, vx, vy, obs, st)
         if x >= target_x:
             return y
     return y
