@@ -25,7 +25,8 @@ def _data_roots():
     return roots
 
 def _static_file(path):
-    safe = os.path.normpath(path).lstrip("/")
+    # Windows uyumu: normpath Windows'ta ters slash verir; ikisini de sil.
+    safe = os.path.normpath(path).lstrip('/\\')
     for r in _data_roots():
         fp = os.path.join(r, safe)
         if os.path.isfile(fp):
