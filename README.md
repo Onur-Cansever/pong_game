@@ -144,3 +144,42 @@ python3 selfplay.py 5
 - `GET /brain` — sağlık kontrolü.
 - `GET /ai_memory` — güncel öğrenme durumu.
 - `GET /clear_memory` — hafızayı sıfırla.
+
+---
+
+## 🪟 Windows'ta Çalıştırma / EXE Üretme
+
+Oyun tarayıcı tabanlıdır; `.exe`'ye dönüştürmek zorunlu değildir. İki seçenek:
+
+### Seçenek 1 — Python ile (önerilen, bağımlılık yok)
+Windows makinesine Python kur (python.org → kurulumda **"Add Python to PATH"** kutusunu
+işaretle). Sonra bu klasörde:
+```bat
+baslat.bat
+```
+Bu, `python3 server.py` çalıştırıp tarayıcıyı otomatik açar.
+Sunucu `0.0.0.0:8077` dinlediği için **aynı ağdaki telefon/arkadaş**
+`http://<Windows-PC-IP>:8077` ile katılabilir.
+
+### Seçenek 2 — Tek dosya EXE (PyInstaller)
+Arkadaşlara "çift tıkla" dosyası vereceksen:
+1. Windows makinesinde `pip install pyinstaller`
+2. Bu klasörde `exe-yap.bat` çalıştır (veya terminalde):
+   ```bat
+   pyinstaller --onefile --noconsole --name Pong ^
+       --add-data "pong.html;." --add-data "terminator_music.webm;." server.py
+   ```
+3. Çıktı `dist\Pong\Pong.exe` olur. Bu exe'yi + (aynı klasörde) `brain.py`
+   arkadaşlarına gönder. `Pong.exe` çift tıkla sunucuyu başlatır, tarayıcı açılır.
+
+> **Neden exe bu Linux sunucudan verilmedi?** PyInstaller hedef OS'te derler
+> (Windows `.exe`'i Windows'ta, Linux `.bin`'i Linux'ta). Bu makine Linux olduğu
+> için Windows `.exe`'i burada üretilmez; yukarıdaki `exe-yap.bat` bu yüzden
+> *Windows makinesinde* çalıştırılır. Oluşan `Pong.exe`'yi buraya geri koyabilir,
+> arkadaşlarınla paylaşabilirsin.
+
+### Paylaşım ipuçları
+- **En kolayı:** repo klasörünü ZIP'le, arkadaşın indirsin → Python kuru → `baslat.bat`.
+- **EXE'ye dönüştür:** `exe-yap.bat` → `dist\Pong.exe`'yi ZIP'le paylaş.
+- İki taraf da `ai_memory.json` üretir; bu dosya `.gitignore`'da olduğu için
+  her kurulum "temiz beyinle" başlar (öğrenme makineye özel kalır).

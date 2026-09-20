@@ -14,3 +14,8 @@ server.log
 # Ortam
 .env
 .venv/
+
+# PyInstaller çıktıları (exe-yap.bat çalıştırınca oluşur; Windows makinesinde)
+build/
+dist/
+*.spec

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pong sunucu: statik dosyalar + /brain (AI) endpoint'i. Bağımlılık yok."""
-import json, os
+import json, os, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -63,4 +63,8 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     brain.load_memory()
     print(f"Pong sunucu: http://localhost:{PORT}  (beyin: /brain, hafıza: /ai_memory)")
+    # Tarayıcıyı otomatik aç (isteğe bağlı: --no-open ile kapatılır)
+    if "--no-open" not in sys.argv:
+        import webbrowser, threading
+        threading.Timer(0.8, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
