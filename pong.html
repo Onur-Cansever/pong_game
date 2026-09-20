@@ -117,58 +117,39 @@ addEventListener('pointerdown', audio, {once:true});
 addEventListener('keydown', audio, {once:true});
 
 /* ================= TERMINATOR 2 — TEMA MÜZİĞİ + ALEV ================= */
-// WebAudio ile sentezlenir (dosya yok). Top TERM_SPEED'e ulaşınca çalınır.
-const noteFreq = {
-  'E2':82.41,'B2':123.47,'E3':164.81,'G#3':207.65,'B3':246.94,
-  'D4':293.66,'E4':329.63,'F#4':369.99,'G4':392.00,'G#4':415.30,
-  'A4':440.00,'B4':493.88,'C5':523.25,'D5':587.33
-};
-// E minor, dramatik brass — yükselen motif + kapanış
-const THEME = [
-  ['E2',1],['E2',1],
-  ['E3',.5],['G#3',.5],['B3',.5],['E4',1],
-  ['F#4',.5],['E4',.5],['D4',.5],['F#4',1],
-  ['G4',.5],['F#4',.5],['E4',.5],['B4',1],
-  ['A4',.5],['B4',.5],['C5',.5],['A4',1],
-  ['G4',.5],['G#4',.5],['B4',.5],['C5',1],
-  ['B4',1],['A4',.5],['G4',.5],['F#4',.5],['E4',.5],
-];
-let termPlaying=false, termLoop=null;
-function termBrass(freq,t,dur,vol=0.16){
-  const ac=audio();
-  const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.value=freq;
-  const o2=ac.createOscillator(); o2.type='square'; o2.frequency.value=freq/2;
-  const f=ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1500;
-  const g=ac.createGain();
-  g.gain.setValueAtTime(0.0001,t);
-  g.gain.linearRampToValueAtTime(vol,t+0.03);
-  g.gain.exponentialRampToValueAtTime(0.001,t+dur);
-  o.connect(f); o2.connect(f); f.connect(g).connect(master);
-  o.start(t); o.stop(t+dur+0.05); o2.start(t); o2.stop(t+dur+0.05);
+// Gerçek tema: /terminator_music.webm (Audio element, döngüde).
+// Top TERM_SPEED'e ulaşınca çalınır, skor arası kesilir.
+let termAudio = null;
+function getTermAudio(){
+  if (!termAudio) {
+    termAudio = new Audio('/terminator_music.webm');
+    termAudio.loop = true;
+    termAudio.volume = 0.8;
+  }
+  return termAudio;
 }
-function scheduleTheme(){
-  if(!soundOn){ termPlaying=false; termBanner.classList.remove('on'); return; }
-  const ac=audio(); const beat=215;
-  let t=ac.currentTime+0.05;
-  for(const [n,b] of THEME){ termBrass(noteFreq[n],t,b*beat*0.95); t+=b*beat; }
-  // düşük E drone (alt kâğıt)
-  const dr=ac.createOscillator(); dr.type='sawtooth'; dr.frequency.value=82.41;
-  const df=ac.createBiquadFilter(); df.type='lowpass'; df.frequency.value=450;
-  const dg=ac.createGain(); dg.gain.value=0.05;
-  dr.connect(df).connect(dg).connect(master);
-  const total=(t-ac.currentTime)*1000+120;
-  dr.start(ac.currentTime); dr.stop(ac.currentTime+total/1000+0.2);
-  termLoop=setTimeout(()=>{ if(termPlaying) scheduleTheme(); }, total);
-}
+let termPlaying=false;
 function termStart(){
-  if(termPlaying) return; termPlaying=true;
+  if (termPlaying) return;
+  if (!soundOn) return;                 // SES KAPALI ise tema çalınmaz
+  termPlaying = true;
   termBanner.classList.add('on');
-  try{ scheduleTheme(); }catch(e){}
+  const ac = audio();           // AudioContext jestini de aç (başka efektler için)
+  try {
+    const a = getTermAudio();
+    a.currentTime = 0;
+    a.play().catch(()=>{});
+  } catch(e){}
 }
 function termStop(){
-  if(!termPlaying) return; termPlaying=false;
+  if (!termPlaying) return;
+  termPlaying = false;
   termBanner.classList.remove('on');
-  if(termLoop){ clearTimeout(termLoop); termLoop=null; }
+  try {
+    const a = getTermAudio();
+    a.pause();
+    a.currentTime = 0;
+  } catch(e){}
 }
 
 /* ================= ALEV PARTİKÜLLERİ ================= */
