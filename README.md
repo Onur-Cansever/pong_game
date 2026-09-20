@@ -1,53 +1,146 @@
-# pong_game
+# BEAT THE AI — Pong
 
-Öğrenen, güçlenen yapay zekâ rakipli bir Pong. Oyun HTML/Canvas'ta, rakibin **beyni Python sunucuda** çalışıyor.
+Gözlüklü Terminator'un arka planda izlediği, rakibi **öğrenen ve güçlenen** bir Pong.
+Top hızlandıkça **JUDGMENT DAY** moduna geçilir: rakip alevlere bürünür, gerçek
+*Terminator 2* tema müziği çalar ve rakip "terminatör" gibi oynar.
 
-## Nasıl çalışır
+Oyun tek HTML dosyasında (Canvas + WebAudio). Rakibin **beyni Python sunucuda**
+çalışır; sunucu kapalıyken tarayıcıdaki yerel yedek AI devreye girer (o da aynı
+fizikle çalışır, sadece hafızası ve nişan kalitesi düşük olur).
 
-- `server.py` — Statik dosyalar + `/brain` endpoint'ini servis eder (saf stdlib, bağımlılık yok).
-- `brain.py` — ÖĞRENEN AI: savunma ısı haritası + zayıf-bölge banditi + optimizasyon tabanlı nişancılık. Hafızayı `ai_memory.json`'a **diskte** kalıcı tutar.
-- `pong.html` — İstemci: Canvas oyun + WebAudio ses efektleri. Her karede durumu `/brain`'e gönderir, AI'nın hedef konumunu uygular. Beyin yanıt vermezse yerel yedek AI'ya düşer.
-- `selfplay.py` — Kendi kendine oynama (headless) testi: gerçek oyun fizik taklidiyle AI'ı referans rakibe karşı koşturur.
+---
 
-## Çalıştırma
+## 🚀 Oyunu Çalıştırma
+
+Bağımlılık yok — saf Python `stdlib` yeterlidir.
 
 ```bash
+cd pong_game
 python3 server.py
-# tarayıcıda: http://localhost:8077/
 ```
 
-Zorluk modları (başta butonlar / `1 2 3 4`):
+Tarayıcıda aç: **http://localhost:8077/**
+(Aynı ağdaki başka cihazdan: `http://<bilgisayar-ip-adın>:8077/`)
 
-| Mod | Başlangıç beceri |
-|-----|------------------|
-| Kolay | 10 |
-| Orta | 35 |
-| Zor | 60 |
-| Çok Zor | 85 |
+Başlatma mesajı:
 
-Her mod **baştan hazır zekâ** ile gelir; oyuncu üstünlük kurdukça beceri o temelin üstüne canlı artar, rakip üstünlük kurunca gevşer. Öğrenme kalıcıdır (mod başına ayrı saklanır).
+```
+Pong sunucu: http://localhost:8077  (beyin: /brain, hafıza: /ai_memory)
+```
 
-Kontroller: `↑ ↓` / `W S` / fare · `SPACE` başlat · `R` yeniden · `1 2 3 4` mod · `L` hafızayı sıfırla.
+> İnternet tarayıcısı açılışında bir kez tuşa/fareye dokunulması gerekir (ses
+> için tarayıcı otomatik oynatma kuralı).
 
-## Test
-
+### Sunucuyu kapatma
+`Ctrl+C` veya
 ```bash
-python3 selfplay.py 5   # her modu 5'er maç kendinden oynatır
+pkill -f "server.py"
 ```
 
-## Dosyalar
+---
 
-- `ai_memory.json` — AI'nın kalıcı öğrenme durumu; `.gitignore`'lanmıştır (her kurulumda temiz başlar).
+## 🎮 Nasıl Oynanır
 
-### Haritalar
+| Tuş | İşlev |
+|-----|-------|
+| `↑` / `↓` veya `W` / `S` | Raketin yukarı / aşağı hareketi |
+| Fare / dokunmatik | Raketini fare imlecine taşır |
+| `SPACE` | Maçı başlat · skordan sonra topu servis et · biten maçta yeniden başla |
+| `R` | Maçı sıfırdan başlat (skorlar sıfırlanır) |
+| `1` `2` `3` `4` | Harita seçimi (aşağı) |
+| `Q` / `E` | Haritayı bir önceki / sonraki yap (döngü) |
+| `L` | Rakibin öğrenme hafızasını sıfırla |
+| Ekran altı butonlar | `SES AÇ/KAPAT` · `HAFIZAYI SIFIRLA` · harita seçimi |
+
+**Kazanma:** 7 sayıya ilk ulaşan kazanır.
+Raketinin neresine çarparsan top o açıyla döner (kenar = keskin açı, merkez = düz).
+Her vuruşta top biraz hızlanır; hız eşiği aşılınca JUDGMENT DAY modu tetiklenir.
+
+---
+
+## 🗺️ Haritalar
+
+Seçim: `1-4` tuşları, `Q/E` döngü ya da ekran altı butonlar. Son seçim tarayıcıda
+kalıcıdır (localStorage).
 
 | Tuş | Harita | Özellik |
 |-----|--------|---------|
-| 1 | Klasik | Orijinal saha |
-| 2 | Boşluk | Yıldız alanı + gezegen, **dairesel yörüngede dolaşan asteroid** |
-| 3 | Yer Altı | Ortada metal daire engel — topa çarpıp sektirir (beyin bunu tahmine katar) |
-| 4 | Sanayi | Parlayan çelik barlar, **alçalıp yükselen iki buhar pistonu** |
+| 1 | **Klasik** | Orijinal saha |
+| 2 | **Boşluk** | Yıldız alanı + gezegen, **dairesel yörüngede dolaşan asteroid** |
+| 3 | **Yer Altı** | Ortada metal daire engel — topa çarpıp sektirir |
+| 4 | **Sanayi** | Parlayan çelik barlar, **alçalıp yükselen iki buhar pistonu** |
 
-Hareketli engeller (2 ve 4) topa çarpıp sektirir; beyin ve yerel yedek AI engel konumunu adım adım simüle ederek yörünge tahminine katar.
+Hareketli / sabit engeller (2, 3, 4) topa çarpınca onu normal boyunca sektirir.
+Beyin ve yerel yedek AI, engel konumunu **adım adım simüle ederek** yörünge
+tahminine katar — yani rakip engeli "görüp" hesaplar, rastgele kaçmaz.
 
-Seçim: **1-4** tuşları, **Q/E** ile döngü ya da ekran altı butonlar. Son seçim tarayıcıda kalıcı.
+---
+
+## 🧠 Rakip (Beyin) Nasıl Çalışır
+
+Rakip **öğrenen, kalıcı hafızalı** bir AI'dır. Üç katmanlı düşünüp oynar:
+
+1. **Göz (yörünge tahmini):** Topa doğru geldiğinde topu ileri sarar;
+   duvar sekmeleri **ve harita engelleri dahil** topun kendi raketiyle
+   buluşacağı y'yi hesaplar. Bu yüzden topun peşinden koşmaz, *varacağı yeri*
+   bekler.
+2. **Beyin (nişan + hafıza):** Ekranı 10 dikey bölgeye böler. İki haritayı tutar:
+   - **Savunma ısı haritası** — neredede sık durduğunu sayar.
+   - **Zayıf bölge banditi** — hangi bölgeden atışta kaçırdığını sayar;
+     kaçırdığın bölge "zayıf" olur ve o bölgeye atış ağırlığı artar.
+   Sonra 60 aday raket konumunu simüle edip topu hedef bölgeye gönderecek
+   **en isabetli temas noktasına** yerleşir (nişan açısı ayarlanır).
+3. **Vücut (hareket):** Raket hedefe hız limitli yaklaşır. JUDGMENT DAY modunda
+   nişan hatası sıfırlanır ve hız topun dikey hızını geçecek kadar artar
+   → neredeyse yenilmez "terminatör" refleks.
+
+### Öğrenme & hafıza
+- Sayı senin lehine açıldıkça **beceri** hızla yükselir (daha keskin nişan,
+  daha hızlı raket, daha az hata); rakip lehine açıldığında hafifçe gevşer.
+- Tüm bunlar `ai_memory.json` dosyasına kalıcı yazılır — oyunu kapatıp açsan da
+  öğrendiklerini hatırlar. `L` tuşu / "HAFIZAYI SIFIRLA" butonu hafızayı sıfırlar.
+- Zayıf bölgeler sahanın sol kenarında ince kırmızı şeritlerle gösterilir.
+
+> **"Beyin çevrimiçi / çevrimdışı" göstergesi:** Rakibin beyni Python sunucuda
+> çalışır. Sunucu ayakta ve `/brain` cevap veriyorsa **çevrimiçi** (yeşil) olur ve
+> öğrenen, hafızalı beyin yönetir. Sunucuya ulaşılamazsa **çevrimdışı**
+> (kırmızı) olur ve tarayıcıdaki yerel yedek AI devreye girer — oyun yine de
+> oynanabilir, sadece rakip hafızasız ve biraz daha sığdır.
+
+---
+
+## 🔥 JUDGMENT DAY Modu
+
+Topun hızı eşiği (12) geçince:
+- Rakip raket **alevlere bürünür** (parçacık efekti).
+- Ekran üstünde **⚠ JUDGMENT DAY ⚠** uyarısı yanıp söner.
+- Gerçek *Terminator 2* tema müziği (`terminator_music.webm`) döngüde çalar.
+- Rakip terminatör refleks moduna geçer (sıfır hata, yüksek hız).
+
+Skor arası mod ve müzik kesilir, top yeni servisle yavaş başlar.
+
+---
+
+## 🛠️ Teknik Yapı & Test
+
+| Dosya | Görev |
+|-------|-------|
+| `server.py` | Statik dosyalar + `/brain` POST + `/clear_memory`, `/ai_memory` (saf stdlib) |
+| `brain.py` | Öğrenen AI: yörünge/engel simülasyonu, nişan optimizasyonu, disk hafızası |
+| `pong.html` | İstemci: Canvas oyun, WebAudio ses, tema müziği, yerel yedek AI, haritalar |
+| `selfplay.py` | Headless test: gerçek fizik taklidiyle AI'ı referans rakibe karşı koşturur |
+| `terminator_music.webm` | JUDGMENT DAY tema müziği |
+| `ai_memory.json` | AI'ın kalıcı öğrenme durumu — `.gitignore`'lanmıştır, her kurulumda temiz başlar |
+
+Kendi kendine oynama testi:
+```bash
+python3 selfplay.py 5
+```
+
+### API
+- `POST /brain` — durum gönder, `{aiY, skill, zone, weak, engaged, diff}` dön.
+  Durum alanları: `bx,by,vx,vy,speed,px,ay,phase,score_p,score_a,missed_player,
+  dtMs,diff,term,obstacles[]` (hareketli engeller `move:{type,a|ph}` ile gelir).
+- `GET /brain` — sağlık kontrolü.
+- `GET /ai_memory` — güncel öğrenme durumu.
+- `GET /clear_memory` — hafızayı sıfırla.

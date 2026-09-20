@@ -107,13 +107,13 @@ def play_game(max_points=40, diff="normal", term=False):
             'maxrally':maxrally,'ai_defense_errors':ai_defense_errors,
             'ai_returned':ai_returned}
 
-def run(n, label, fresh_each=False, diff="normal"):
+def run(n, label, fresh_each=False, diff="normal", term=False):
     print(f"\n=== {label} [{diff}]: {n} maç (ilk {WIN} sayan kazanır) ===")
     wins=0; tsp=tas=0; tot_err=tot_ret=0; rallies=[]
     for i in range(n):
         if fresh_each:
             brain._memory=brain._default_memory()
-        g=play_game(diff=diff)
+        g=play_game(diff=diff, term=term)
         if g['winner']=='AI': wins+=1
         tsp+=g['sp']; tas+=g['sa']
         tot_err+=g['ai_defense_errors']; tot_ret+=g['ai_returned']
@@ -133,7 +133,8 @@ def run(n, label, fresh_each=False, diff="normal"):
 if __name__=='__main__':
     import sys
     n=int(sys.argv[1]) if len(sys.argv)>1 else 8
-    # Her zorluk modunu ayrı ayrı dene (referans "insan" aynı)
-    for d in ["easy","normal","hard","very_hard"]:
-        brain._memory=brain._default_memory()
-        run(n, f"MOD TEST", diff=d)
+    # Modlar kaldırıldı: AI kalıcı olarak "çok zor"da; normal + JUDGMENT DAY (term) iki varyantı dene
+    brain._memory=brain._default_memory()
+    run(n, "ÇOK ZOR (normal)", diff="very_hard")
+    brain._memory=brain._default_memory()
+    run(n, "ÇOK ZOR (JUDGMENT DAY / term)", diff="very_hard", term=True)
