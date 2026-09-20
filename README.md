@@ -44,8 +44,10 @@ python3 selfplay.py 5   # her modu 5'er maç kendinden oynatır
 | Tuş | Harita | Özellik |
 |-----|--------|---------|
 | 1 | Klasik | Orijinal saha |
-| 2 | Boşluk | Yıldız alanı + gezegen |
+| 2 | Boşluk | Yıldız alanı + gezegen, **dairesel yörüngede dolaşan asteroid** |
 | 3 | Yer Altı | Ortada metal daire engel — topa çarpıp sektirir (beyin bunu tahmine katar) |
-| 4 | Sanayi | Parlayan çelik barlar |
+| 4 | Sanayi | Parlayan çelik barlar, **alçalıp yükselen iki buhar pistonu** |
+
+Hareketli engeller (2 ve 4) topa çarpıp sektirir; beyin ve yerel yedek AI engel konumunu adım adım simüle ederek yörünge tahminine katar.
 
 Seçim: **1-4** tuşları, **Q/E** ile döngü ya da ekran altı butonlar. Son seçim tarayıcıda kalıcı.
