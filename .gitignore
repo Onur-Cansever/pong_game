@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Oyunun çalışma durumu (AI'nin kalıcı hafızası: beceri + bölge haritası)
+ai_memory.json
+
+# Loglar
+*.log
+server.log
+
+# Ortam
+.env
+.venv/
