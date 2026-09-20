@@ -248,6 +248,10 @@ def brain(state):
     save_memory()
 
     P = ai_params(skills[diff], diff)
+    # ---- JUDGMENT DAY (alev) modu: top hızlandığında AI "terminatör" gibi oynamalı:
+    #      her zaman kesişim noktasında, neredeyse sıfır hata, raket topun dikey
+    #      hızından hızlı. (Kullanıcı isteği: alevli modda çok çok güçlü refleks) ----
+    term = bool(state.get("term"))
     bx, by = state["bx"], state["by"]
     vx, vy = state["vx"], state["vy"]
     speed = state.get("speed", 6)
@@ -267,33 +271,31 @@ def brain(state):
     if phase == "playing" and vx > 0:
         dist = (AI_FACE_X - BALL_R) - bx
         if dist < P["engage"]:
-            # ---- ÖNCELİK: topu yakala (raket merkezi -> topun AI yüzüne varacağı y) ----
+            # ---- KESİŞİM TAHMİNİ: topun AI yüzüne varacağı y ----
             hit_y = predict_y(AI_FACE_X - BALL_R, bx, by, vx, vy)
-            # ---- Sonra nişan: çıkış açısı, temas noktasının merkeze göre konumundan
-            #      gelir. Merkez'i hafifçe kaydırarak topu istenen bölgeye göndeririz.
-            #      Merkezi hit_y'nin ALTINA al -> topu aşağı (büyük y) vur;
-            #      hit_y'nin ÜSTÜNE al -> topu yukarı (küçük y) vur. Ofset sınırlıdır
-            #      ki yakalama bozulmasın. ----
-            z = pick_target_zone()
-            mem["last_target"] = z
-            target_y = (z + 0.5) * ZH + aim_err
-            # ---- Çıkış açısı: topu hedef bölgeye taşıyacak açını ----
-            # Top AI'dan çıkıp oyuncu yüzüne varma süresi ~ (mesafe / |vx|).
-            # İstenen dikey hız = (target_y - hit_y) / t. Bu açıyı, raket merkezini
-            # temas noktasının üstüne/altına kaydırarak üretiriz:
-            #   rel = (ball_y - center)/(PAD_H/2),  angle = rel * 0.35π
-            #   angle = atan2(vy, |vx|)  ->  rel = angle/(0.35π)
-            import math as _m
-            travel = (AI_FACE_X - BALL_R - PLAYER_FACE_X)      # AI -> oyuncu mesafesi
-            t_cross = max(0.5, travel / max(1.0, abs(vx) * 0.9))  # geçiş süresi (kare)
-            vy_want = clamp((target_y - hit_y) / max(1.0, t_cross), -abs(vx)*1.2, abs(vx)*1.2)
-            ang = _m.atan2(vy_want, max(1.0, abs(vx)))
-            rel_ideal = clamp(ang / (0.35 * _m.pi), -0.92, 0.92)   # 0.92: tam kenara çelme
-            # Düşük beceride açılar daralır (yakalama öncelikli), yüksek beceride genişler
-            rel_ideal *= (0.4 + 0.6 * P["s"])
-            ai_center = hit_y - (PAD_H / 2) * rel_ideal
-            target = clamp(ai_center, PAD_H/2 + 6, H - PAD_H/2 - 6)
-            engaged = True
+            if term:
+                # ---- JUDGMENT DAY: saf kesişim, sıfır hata, sıfır ofset ----
+                # Rakip "terminatör" gibi topu tam kesişim noktasında bekler;
+                # nişan ofseti ve nişan hatası KAPALI ki top kaçırılmasın.
+                target = clamp(hit_y, PAD_H/2 + 4, H - PAD_H/2 - 4)
+                engaged = True
+            else:
+                # ---- Sonra nişan: çıkış açısı, temas noktasının merkeze göre
+                #      konumundan gelir. Merkez'i hafifçe kaydırarak topu
+                #      istenen bölgeye göndeririz. ----
+                z = pick_target_zone()
+                mem["last_target"] = z
+                target_y = (z + 0.5) * ZH + aim_err
+                travel = (AI_FACE_X - BALL_R - PLAYER_FACE_X)
+                t_cross = max(0.5, travel / max(1.0, abs(vx) * 0.9))
+                vy_want = clamp((target_y - hit_y) / max(1.0, t_cross), -abs(vx)*1.2, abs(vx)*1.2)
+                import math as _m
+                ang = _m.atan2(vy_want, max(1.0, abs(vx)))
+                rel_ideal = clamp(ang / (0.35 * _m.pi), -0.92, 0.92)
+                rel_ideal *= (0.4 + 0.6 * P["s"])
+                ai_center = hit_y - (PAD_H / 2) * rel_ideal
+                target = clamp(ai_center, PAD_H/2 + 6, H - PAD_H/2 - 6)
+                engaged = True
         else:
             # uzaktan: savunma haritasının en yoğun bölgesine süzül
             mz, bi = 0, -1
@@ -321,10 +323,16 @@ def brain(state):
     # ---- Hareket (speed limitli yaklaşma, dt ölçekli) ----
     dead = P["deadzone"]
     dtf = clamp(state.get("dtMs", 16.7) / 16.667, 0.3, 3.0)
+    max_move = P["speed"]
+    if term:
+        # JUDGMENT DAY: rakip topun dikey hızını geçmeli (terminatör refleks).
+        # 12 + 8*s -> s=1'de 20 px/kare (top max ~17 hızda, dikey bileşeni 17'den az).
+        max_move = max(max_move, 12 + 8 * P["s"])
+        dead = 1.5
     new_y = ai_y
     d = target - (ai_y + PAD_H / 2)
     if abs(d) > dead:
-        new_y = clamp(ai_y + clamp(d, -P["speed"] * dtf, P["speed"] * dtf), 0, H - PAD_H)
+        new_y = clamp(ai_y + clamp(d, -max_move * dtf, max_move * dtf), 0, H - PAD_H)
     new_y = clamp(new_y, 0, H - PAD_H)
 
     save_memory()

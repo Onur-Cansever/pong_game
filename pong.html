@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pong</title>
+<title>BEAT THE AI</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body{ height:100%; background:#0a0a12; color:#fff;
     font-family:'Courier New',monospace; overflow:hidden; }
   body{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; }
-  h1{ font-size:24px; letter-spacing:10px; color:#7df; text-shadow:0 0 12px #0ff; }
+  h1{ font-size:26px; letter-spacing:8px; color:#ff5a2a;
+    text-shadow:0 0 10px rgba(255,90,20,.7), 0 0 3px #fff; }
   canvas{ background:#05050c; border:2px solid #1e2a44; border-radius:8px;
     box-shadow:0 0 40px rgba(0,255,255,.15) inset, 0 0 25px rgba(0,0,0,.6);
     display:block; touch-action:none; max-width:96vw; }
@@ -33,7 +34,7 @@
 </style>
 </head>
 <body>
-  <h1>PONG</h1>
+  <h1>BEAT THE AI</h1>
   <canvas id="game" width="800" height="500"></canvas>
   <div class="hint">Hareket: <b>↑ ↓</b> veya <b>W S</b> (veya fare) · Başlat: <b>SPACE</b> · Yeniden: <b>R</b> · Hafızayı sil: <b>L</b></div>
   <div class="stat">
@@ -222,6 +223,7 @@ async function askBrain(dtMs){
     score_p: scoreP, score_a: scoreA,
     missed_player: missedFlag, dtMs: dtMs,
     diff: diff,
+    term: termMode,
   };
   missedFlag = false;
   try {
@@ -251,7 +253,8 @@ let aiTarget = null;
 let localSkill = localBase;
 function localBrain(dtMs){
   const s = clamp(localSkill,0,100)/100;
-  const speed = 7.5 + 3.5*s, engage = 520;
+  const speed = (termMode ? 20 : 7.5 + 3.5*s);   // alev modunda terminatör hızı
+  const engage = 520;
   const step = speed * (dtMs/16.667);
   let target = H/2;
   if (state === 'playing' && ball.vx > 0) {
@@ -259,7 +262,8 @@ function localBrain(dtMs){
     if (dist < engage) {
       let x=ball.x, y=ball.y, vx=ball.vx, vy=ball.vy;
       for (let i=0;i<500 && x<ai.x-BALL_R;i++){ x+=vx; y+=vy; if(y<BALL_R||y>H-BALL_R) vy=-vy; }
-      target = lerp(ball.y, y, s);
+      // Alev modunda saf kesişim; normalde kısmen tahmin
+      target = termMode ? y : lerp(ball.y, y, s);
     } else target = H/2 + (ball.y - H/2)*0.3;
   }
   const d = target - (ai.y + ai.h/2);
@@ -346,7 +350,9 @@ function update(now){
   askBrain(dtMs);
   if (!brainUp) localBrain(dtMs);
   if (brainUp && aiTarget !== null) {
-    ai.y = clamp(lerp(ai.y, clamp(aiTarget, 0, H - ai.h), 0.55), 0, H - ai.h);
+    // Alev (JUDGMENT DAY) modunda neredeyse anlık takip; normalde yumuşak.
+    const k = termMode ? 0.93 : 0.55;
+    ai.y = clamp(lerp(ai.y, clamp(aiTarget, 0, H - ai.h), k), 0, H - ai.h);
     aiTarget = null;
   }
 
@@ -398,8 +404,49 @@ function overlay(title, sub){
   ctx.fillText(title, W/2, H/2 - 10);
   if (sub){ ctx.font = '20px "Courier New", monospace'; ctx.fillStyle = '#9fd'; ctx.fillText(sub, W/2, H/2 + 30); }
 }
+function drawTerminator(now){
+  // Silik, karanlık, gözlüklü Terminator — arka plan (hafif belli)
+  const flick = 0.5 + 0.5*Math.sin(now/900)*Math.sin(now/570);
+  const cx = W/2, top = 70;
+  ctx.save();
+  ctx.globalAlpha = 0.10 + 0.05*flick;        // çok silik
+  ctx.translate(cx, top);
+  // Kafa (metalik krom)
+  const kg = ctx.createLinearGradient(0,0,0,150);
+  kg.addColorStop(0,'#2a2d33'); kg.addColorStop(0.5,'#4a4f57'); kg.addColorStop(1,'#1a1c20');
+  ctx.fillStyle = kg;
+  ctx.beginPath();
+  ctx.moveTo(-70,40); ctx.lineTo(-58,0); ctx.lineTo(58,0); ctx.lineTo(70,40);
+  ctx.lineTo(62,140); ctx.lineTo(40,170); ctx.lineTo(-40,170); ctx.lineTo(-62,140);
+  ctx.closePath(); ctx.fill();
+  // Alın çizgileri (krom parçaları)
+  ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=2;
+  for(let i=0;i<4;i++){ ctx.beginPath(); ctx.moveTo(-50+i*3,18+i*2); ctx.lineTo(50-i*3,18+i*2); ctx.stroke(); }
+  // Göz çukurları (karanlık)
+  ctx.fillStyle='rgba(0,0,0,0.55)';
+  ctx.beginPath(); ctx.ellipse(-32,60,22,15,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(32,60,22,15,0,0,7); ctx.fill();
+  // Işınan gözler (alev modunda parlak)
+  const eyeCol = termMode ? `rgba(255,60,10,${0.85+flick*0.15})` : `rgba(255,120,40,${0.5+flick*0.4})`;
+  ctx.shadowColor = termMode ? '#ff3a0a' : '#ff7a00';
+  ctx.shadowBlur = termMode ? 30 : 14;
+  ctx.fillStyle = eyeCol;
+  ctx.beginPath(); ctx.ellipse(-32,60,12,7,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(32,60,12,7,0,0,7); ctx.fill();
+  ctx.shadowBlur = 0;
+  // Ağız / çene (krom)
+  ctx.strokeStyle='rgba(255,255,255,0.14)';
+  ctx.beginPath(); ctx.moveTo(-18,110); ctx.lineTo(18,110); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-10,125); ctx.lineTo(10,125); ctx.stroke();
+  // Gövde ipuçları (omuzlar)
+  ctx.fillStyle='rgba(40,44,52,0.7)';
+  ctx.beginPath(); ctx.moveTo(-95,175); ctx.lineTo(-55,168); ctx.lineTo(-55,210); ctx.lineTo(-100,215); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(95,175); ctx.lineTo(55,168); ctx.lineTo(55,210); ctx.lineTo(100,215); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
 function render(){
   ctx.clearRect(0,0,W,H);
+  drawTerminator(performance.now());
   ctx.setLineDash([12,14]); ctx.strokeStyle = 'rgba(120,150,200,0.25)'; ctx.lineWidth = 3;
   ctx.beginPath();
   for (let y=0; y<=H; y+=26){ ctx.moveTo(W/2,y); ctx.lineTo(W/2,y+13); }

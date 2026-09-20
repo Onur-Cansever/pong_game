@@ -50,7 +50,7 @@ def move_player(py, b, dtF):
     return py
 
 # ---------- Bir maç ----------
-def play_game(max_points=40, diff="normal"):
+def play_game(max_points=40, diff="normal", term=False):
     b=new_ball(); serve(b, random.choice([-1,1]))
     player_y=H/2-PAD_H/2
     # AI başlangıç y: beyinden al
@@ -67,7 +67,7 @@ def play_game(max_points=40, diff="normal"):
         # --- AI (beyin) hareket ---
         st={'bx':b.x,'by':b.y,'vx':b.vx,'vy':b.vy,'speed':b.speed,
             'px':player_y+PAD_H/2,'ay':ai_y,'phase':'playing',
-            'score_p':sp,'score_a':sa,'dtMs':16.7,'diff':diff}
+            'score_p':sp,'score_a':sa,'dtMs':16.7,'diff':diff,'term':term}
         out=brain.brain(st)
         ai_y=clamp(out['aiY'],0,H-PAD_H)
         # --- top ---
@@ -93,7 +93,7 @@ def play_game(max_points=40, diff="normal"):
                 sa+=1; rally=0; serve_dir=1
                 st2={'bx':b.x,'by':b.y,'vx':b.vx,'vy':b.vy,'speed':b.speed,
                      'px':player_y+PAD_H/2,'ay':ai_y,'phase':'playing',
-                     'score_p':sp,'score_a':sa,'missed_player':True,'dtMs':16.7,'diff':diff}
+                     'score_p':sp,'score_a':sa,'missed_player':True,'dtMs':16.7,'diff':diff,'term':term}
                 brain.brain(st2)
                 serve(b,1); 
             elif b.x>W+20:
