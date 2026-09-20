@@ -10,6 +10,7 @@ import json, os, math, random, threading, time
 # ---- Sabitler (HTML ile aynı alan: 800x500) ----
 W, H = 800, 500
 BALL_R = 8
+PADDLE_ANGLE = math.pi * 0.35   # raket temas açısı (pong.html ile AYNI kalmalı!)
 AI_X = W - 24 - 12          # ai raket sol yüzü
 AI_FACE_X = AI_X
 PLAYER_FACE_X = 24 + 12 + BALL_R   # oyuncu yüzünden çıkış
@@ -153,7 +154,7 @@ def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y, obstacles=None)
     """Raket ai_y'de olsa topun oyuncu yüzüne varacağı y'yi hesapla."""
     # smaç: top ai yüzüne çarpıyor, çıkış açısı raket merkezine göre
     rel = clamp((ball_y - (ai_y + PAD_H / 2)) / (PAD_H / 2), -1, 1)
-    angle = rel * (math.pi * 0.35)
+    angle = rel * PADDLE_ANGLE
     nvy = math.sin(angle) * speed
     nvx = math.cos(angle) * speed          # sağa (oyuncuya doğru)
     # topun çıkış noktası: ai yüzü
@@ -348,7 +349,7 @@ def brain(state):
                 vy_want = clamp((target_y - hit_y) / max(1.0, t_cross), -abs(vx)*1.2, abs(vx)*1.2)
                 import math as _m
                 ang = _m.atan2(vy_want, max(1.0, abs(vx)))
-                rel_ideal = clamp(ang / (0.35 * _m.pi), -0.92, 0.92)
+                rel_ideal = clamp(ang / PADDLE_ANGLE, -0.92, 0.92)
                 rel_ideal *= (0.4 + 0.6 * P["s"])
                 ai_center = hit_y - (PAD_H / 2) * rel_ideal
                 target = clamp(ai_center, PAD_H/2 + 6, H - PAD_H/2 - 6)
