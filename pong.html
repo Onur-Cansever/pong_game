@@ -26,22 +26,18 @@
   button{ background:#1a2338; color:#9fd; border:1px solid #2a3a5a; border-radius:6px;
     font-family:inherit; font-size:12px; padding:4px 10px; cursor:pointer; letter-spacing:1px; }
   button:hover{ background:#243350; }
-  .diffs{ display:inline-flex; gap:5px; }
-  .diff.active{ background:#2a4a6a; color:#fff; border-color:#4fe3ff;
-    box-shadow:0 0 8px rgba(79,227,255,.4); }
+  .term{ font-size:12px; color:#ff5a2a; letter-spacing:2px; font-weight:bold;
+    text-shadow:0 0 10px #ff3a0a; opacity:0; transition:opacity .2s; }
+  .term.on{ opacity:1; animation:termflick .5s infinite alternate; }
+  @keyframes termflick{ from{ text-shadow:0 0 8px #ff3a0a; } to{ text-shadow:0 0 18px #ff7a0a, 0 0 4px #fff; } }
 </style>
 </head>
 <body>
   <h1>PONG</h1>
   <canvas id="game" width="800" height="500"></canvas>
-  <div class="hint">Hareket: <b>↑ ↓</b> veya <b>W S</b> (veya fare) · Başlat: <b>SPACE</b> · Yeniden: <b>R</b> · Mod: <b>1 2 3 4</b> · Hafızayı sil: <b>L</b></div>
+  <div class="hint">Hareket: <b>↑ ↓</b> veya <b>W S</b> (veya fare) · Başlat: <b>SPACE</b> · Yeniden: <b>R</b> · Hafızayı sil: <b>L</b></div>
   <div class="stat">
-    <span class="diffs">
-      <button data-diff="easy"   class="diff">KOLAY</button>
-      <button data-diff="normal" class="diff">ORTA</button>
-      <button data-diff="hard"   class="diff">ZOR</button>
-      <button data-diff="very_hard" class="diff">ÇOK ZOR</button>
-    </span>
+    <span class="term" id="termBanner">⚠ JUDGMENT DAY ⚠</span>
     <span><span class="dot off" id="brainDot"></span><b id="brainTxt">beyin çevrimdışı</b></span>
     <span>Rakip becerisi: <span class="skillbar"><i id="skillFill"></i></span> <b id="skillBox">0</b>/100</span>
     <span>Zayıf bölge: <b id="zoneBox">0/10</b></span>
@@ -64,13 +60,12 @@ let winner = '';
 let pauseUntil = 0, serveDir = 1;
 let missedFlag = false;
 
-/* Zorluk modu (beyin baştan hazır zekâ ile gelir + canlı gelişir) */
-const DIFFS = {
-  easy:{label:'KOLAY', key:'1'}, normal:{label:'ORTA', key:'2'},
-  hard:{label:'ZOR', key:'3'}, very_hard:{label:'ÇOK ZOR', key:'4'},
-};
-let diff = localStorage.getItem('pong_diff') || 'normal';
-if (!DIFFS[diff]) diff = 'normal';
+/* Zorluk KALDIRILDI — beyin kalıcı olarak "ÇOK ZOR"da çalışıyor. */
+const diff = 'very_hard';
+/* Top bu hızın üstüne çıkınca "JUDGMENT DAY" modu: alev + tema müziği */
+const TERM_SPEED = 12;
+let termMode = false;
+const termBanner = document.getElementById('termBanner');
 
 const player = { x:24, y:H/2-PAD_H/2, w:PAD_W, h:PAD_H };
 const ai     = { x:W-24-PAD_W, y:H/2-PAD_H/2, w:PAD_W, h:PAD_H };
@@ -121,23 +116,104 @@ updateSndBtn();
 addEventListener('pointerdown', audio, {once:true});
 addEventListener('keydown', audio, {once:true});
 
-/* ================= ZORLUK MODU ================= */
-const diffBtns = Array.from(document.querySelectorAll('button.diff'));
-function updateDiffUI(){
-  diffBtns.forEach(b => b.classList.toggle('active', b.dataset.diff === diff));
+/* ================= TERMINATOR 2 — TEMA MÜZİĞİ + ALEV ================= */
+// WebAudio ile sentezlenir (dosya yok). Top TERM_SPEED'e ulaşınca çalınır.
+const noteFreq = {
+  'E2':82.41,'B2':123.47,'E3':164.81,'G#3':207.65,'B3':246.94,
+  'D4':293.66,'E4':329.63,'F#4':369.99,'G4':392.00,'G#4':415.30,
+  'A4':440.00,'B4':493.88,'C5':523.25,'D5':587.33
+};
+// E minor, dramatik brass — yükselen motif + kapanış
+const THEME = [
+  ['E2',1],['E2',1],
+  ['E3',.5],['G#3',.5],['B3',.5],['E4',1],
+  ['F#4',.5],['E4',.5],['D4',.5],['F#4',1],
+  ['G4',.5],['F#4',.5],['E4',.5],['B4',1],
+  ['A4',.5],['B4',.5],['C5',.5],['A4',1],
+  ['G4',.5],['G#4',.5],['B4',.5],['C5',1],
+  ['B4',1],['A4',.5],['G4',.5],['F#4',.5],['E4',.5],
+];
+let termPlaying=false, termLoop=null;
+function termBrass(freq,t,dur,vol=0.16){
+  const ac=audio();
+  const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.value=freq;
+  const o2=ac.createOscillator(); o2.type='square'; o2.frequency.value=freq/2;
+  const f=ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=1500;
+  const g=ac.createGain();
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(vol,t+0.03);
+  g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(f); o2.connect(f); f.connect(g).connect(master);
+  o.start(t); o.stop(t+dur+0.05); o2.start(t); o2.stop(t+dur+0.05);
 }
-function setDiff(name){
-  if (!DIFFS[name]) return;
-  diff = name;
-  localStorage.setItem('pong_diff', diff);
-  updateDiffUI();
-  // yerel yedek beceriyi de moda göre başlat
-  localSkill = {easy:10, normal:35, hard:60, very_hard:85}[name];
-  // beyin anında yeni moda geçsin
-  askBrain(16.7);
+function scheduleTheme(){
+  if(!soundOn){ termPlaying=false; termBanner.classList.remove('on'); return; }
+  const ac=audio(); const beat=215;
+  let t=ac.currentTime+0.05;
+  for(const [n,b] of THEME){ termBrass(noteFreq[n],t,b*beat*0.95); t+=b*beat; }
+  // düşük E drone (alt kâğıt)
+  const dr=ac.createOscillator(); dr.type='sawtooth'; dr.frequency.value=82.41;
+  const df=ac.createBiquadFilter(); df.type='lowpass'; df.frequency.value=450;
+  const dg=ac.createGain(); dg.gain.value=0.05;
+  dr.connect(df).connect(dg).connect(master);
+  const total=(t-ac.currentTime)*1000+120;
+  dr.start(ac.currentTime); dr.stop(ac.currentTime+total/1000+0.2);
+  termLoop=setTimeout(()=>{ if(termPlaying) scheduleTheme(); }, total);
 }
-diffBtns.forEach(b => b.onclick = () => setDiff(b.dataset.diff));
-updateDiffUI();
+function termStart(){
+  if(termPlaying) return; termPlaying=true;
+  termBanner.classList.add('on');
+  try{ scheduleTheme(); }catch(e){}
+}
+function termStop(){
+  if(!termPlaying) return; termPlaying=false;
+  termBanner.classList.remove('on');
+  if(termLoop){ clearTimeout(termLoop); termLoop=null; }
+}
+
+/* ================= ALEV PARTİKÜLLERİ ================= */
+let flames=[];
+function spawnFlames(){
+  for(let i=0;i<3;i++){
+    flames.push({
+      x: ai.x + Math.random()*ai.w,
+      y: ai.y + Math.random()*ai.h,
+      vx: (Math.random()-0.5)*0.4,
+      vy: -0.6 - Math.random()*1.3,
+      life: 0, max: 28+Math.random()*22,
+      r: 3+Math.random()*6
+    });
+  }
+}
+function updateFlames(df){
+  for(const f of flames){ f.x+=f.vx*df; f.y+=f.vy*df; f.life+=df; }
+  flames=flames.filter(f=>f.life<f.max);
+}
+function drawFlames(){
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(const f of flames){
+    const k=f.life/f.max, a=(1-k)*0.8, r=f.r*(1+(1-k)*1.5);
+    const g=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,r);
+    g.addColorStop(0,`rgba(255,240,150,${a})`);
+    g.addColorStop(0.4,`rgba(255,120,20,${a*0.8})`);
+    g.addColorStop(1,'rgba(255,0,0,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(f.x,f.y,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawAiFlame(){
+  const t=performance.now()/100;
+  const flick=0.7+0.3*Math.sin(t*3)*Math.sin(t*1.7);
+  const g=ctx.createLinearGradient(0,ai.y,0,ai.y+ai.h);
+  g.addColorStop(0,'#ffd24d'); g.addColorStop(0.3,'#ff7a00');
+  g.addColorStop(0.7,'#ff3a0a'); g.addColorStop(1,'#7a1000');
+  ctx.save();
+  ctx.shadowColor='#ff5a00'; ctx.shadowBlur=34*flick;
+  ctx.fillStyle=g; ctx.fillRect(ai.x,ai.y,ai.w,ai.h);
+  ctx.fillStyle=`rgba(255,248,210,${0.55*flick})`;
+  ctx.fillRect(ai.x+2,ai.y+4,ai.w-4,ai.h-8);
+  ctx.restore();
+}
 
 /* ================= BEYİN (Python sunucu /brain) ================= */
 let brainUp = false;
@@ -181,20 +257,20 @@ async function askBrain(dtMs){
     setBrainUI(false, brainSkill, weakZones);
   } finally { brainPending = false; }
 }
-const localBase = {easy:10, normal:35, hard:60, very_hard:85};
+const localBase = 95;   // yerel yedek beceri: kalıcı "çok zor"
 async function clearMemory(){
   try { await fetch('/clear_memory'); } catch(e){}
-  localSkill = localBase[diff] || 35;
+  localSkill = localBase;
   setBrainUI(brainUp, brainSkill, []);
 }
 document.getElementById('memBtn').onclick = clearMemory;
 
 /* Yerel yedek AI (beyin yanıt vermezse) */
 let aiTarget = null;
-let localSkill = localBase[diff] || 35;
+let localSkill = localBase;
 function localBrain(dtMs){
   const s = clamp(localSkill,0,100)/100;
-  const speed = 5.5 + 5.5*s, engage = 150 + 330*s;
+  const speed = 7.5 + 3.5*s, engage = 520;
   const step = speed * (dtMs/16.667);
   let target = H/2;
   if (state === 'playing' && ball.vx > 0) {
@@ -223,6 +299,7 @@ function serve(dir){
   ball.vx = Math.cos(a) * ball.speed * dir;
   ball.vy = Math.sin(a) * ball.speed;
   state = 'playing';
+  if (termMode) { termMode = false; termStop(); }   // skor arası: alev + müzik kesilir
   S.serve();
 }
 function startOrServe(){
@@ -258,10 +335,6 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); startOrServe(); }
   if (k === 'r') reset();
   if (k === 'l') clearMemory();
-  if (k === '1') setDiff('easy');
-  if (k === '2') setDiff('normal');
-  if (k === '3') setDiff('hard');
-  if (k === '4') setDiff('very_hard');
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 canvas.addEventListener('mousemove', e => {
@@ -295,6 +368,11 @@ function update(now){
     ai.y = clamp(lerp(ai.y, clamp(aiTarget, 0, H - ai.h), 0.55), 0, H - ai.h);
     aiTarget = null;
   }
+
+  // Top hızlanınca JUDGMENT DAY modu (alev + tema müziği)
+  if (ball.speed >= TERM_SPEED && !termMode) { termMode = true; termStart(); }
+  else if (ball.speed < TERM_SPEED - 2 && termMode) { termMode = false; termStop(); }
+  if (termMode) { spawnFlames(); updateFlames(dtF); }
 
   ball.prevX = ball.x;
   ball.x += ball.vx * dtF;
@@ -351,7 +429,8 @@ function render(){
   ctx.globalAlpha = 1;
 
   drawPaddle(player, '#4fe3ff');
-  drawPaddle(ai, '#ff5d7d');
+  if (termMode) { drawAiFlame(); drawFlames(); }
+  else drawPaddle(ai, '#ff5d7d');
 
   if (state !== 'ready') {
     ctx.save(); ctx.shadowColor = '#fff'; ctx.shadowBlur = 18; ctx.fillStyle = '#fff';

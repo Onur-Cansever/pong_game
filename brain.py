@@ -19,19 +19,21 @@ LS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_memory.js
 MAX_SPEED = 17
 PAD_H = 90
 
-# ---- Zorluk modları: her biri BAŞTAN hazır bir zekâ ile gelir;
-#      canlı gelişme bu temelin ÜSTÜNE eklenir (kalıcı, mod başına ayrı) ----
-# base    = başlangıç becerisi (0..100)
-# learn   = oyuncu üstünlük kurdukça öğrenme hızı çarpanı
-# decay   = AI üstünlük kurduğunda gevşeme çarpanı
-# err/speed_scale = modun genel yetenek ölçeği
+# ---- Zorluk: MODLAR KALDIRILDI, AI kalıcı olarak "ÇOK ZOR"da sabit. ----
+# Bu parametreler "çok çok çok daha akıllı" için yükseltildi:
+#   base      = başlangıç becerisi (0..100)
+#   learn     = oyuncu üstünlük kurdukça öğrenme hızı çarpanı (çok hızlı güçlenme)
+#   decay     = AI üstünlük kurunca gevşeme (neredeyse hiç gevşemiyor)
+#   err_scale = nişan hatası çarpanı (küçük = çok keskin)
+#   speed_scale = raket hızı çarpanı (büyük = hızlı)
+#   engage    = topa bu kadar yakından erken müdahale (px)
 DIFFICULTIES = {
-    "easy":      {"base": 10, "learn": 0.5, "decay": 0.10, "err_scale": 1.40, "speed_scale": 0.90},
-    "normal":    {"base": 35, "learn": 1.0, "decay": 0.25, "err_scale": 1.00, "speed_scale": 1.00},
-    "hard":      {"base": 60, "learn": 1.6, "decay": 0.15, "err_scale": 0.75, "speed_scale": 1.05},
-    "very_hard": {"base": 85, "learn": 2.2, "decay": 0.08, "err_scale": 0.50, "speed_scale": 1.10},
+    "very_hard": {
+        "base": 95, "learn": 3.0, "decay": 0.02,
+        "err_scale": 0.28, "speed_scale": 1.20, "engage": 520,
+    },
 }
-DEFAULT_DIFF = "normal"
+DEFAULT_DIFF = "very_hard"
 
 _mem_lock = threading.Lock()
 _memory = None
@@ -114,7 +116,7 @@ def ai_params(active_skill, diff_name):
     return {
         "speed": (7.5 + 3.5 * s) * D["speed_scale"],
         "error": (46 - 40 * s) * D["err_scale"],
-        "engage": 150 + 330 * s,
+        "engage": D.get("engage", 150 + 330 * s),
         "deadzone": 6 - 3 * s,
         "s": s,
         "diff": D,
