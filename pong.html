@@ -31,12 +31,21 @@
     text-shadow:0 0 10px #ff3a0a; opacity:0; transition:opacity .2s; }
   .term.on{ opacity:1; animation:termflick .5s infinite alternate; }
   @keyframes termflick{ from{ text-shadow:0 0 8px #ff3a0a; } to{ text-shadow:0 0 18px #ff7a0a, 0 0 4px #fff; } }
+  .mappick{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  .mappick span{ font-size:12px; color:#5a6b8c; letter-spacing:1px; }
 </style>
 </head>
 <body>
   <h1>BEAT THE AI</h1>
   <canvas id="game" width="800" height="500"></canvas>
-  <div class="hint">Hareket: <b>↑ ↓</b> veya <b>W S</b> (veya fare) · Başlat: <b>SPACE</b> · Yeniden: <b>R</b> · Hafızayı sil: <b>L</b></div>
+  <div class="mappick">
+    <span>HARİTA:</span>
+    <button id="mapBtn0">1 · KLASİK</button>
+    <button id="mapBtn1">2 · BOŞLUK</button>
+    <button id="mapBtn2">3 · YER ALTI</button>
+    <button id="mapBtn3">4 · SANAYİ</button>
+  </div>
+  <div class="hint">Hareket: <b>↑ ↓</b> veya <b>W S</b> (veya fare) · Başlat: <b>SPACE</b> · Yeniden: <b>R</b> · Harita: <b>1-4 / Q E</b> · Hafızayı sil: <b>L</b></div>
   <div class="stat">
     <span class="term" id="termBanner">⚠ JUDGMENT DAY ⚠</span>
     <span><span class="dot off" id="brainDot"></span><b id="brainTxt">beyin çevrimdışı</b></span>
@@ -54,6 +63,16 @@ const WIN_SCORE = 7;
 const PAD_W = 12, PAD_H = 90, PAD_SPEED = 8;
 const BALL_R = 8, BALL_SPEED0 = 6, BALL_ACC = 1.3, BALL_MAX = 17;
 const ZONES = 10, ZH = H / ZONES;
+
+/* ================= HARİTALAR ================= */
+// Yer Altı'da ortada metal daire engel: topa çarpıp sektirir (beyin bunu tahmine katar).
+const MAPS = [
+  { name: 'Klasik',   obstacles: [] },
+  { name: 'Boşluk',   obstacles: [] },
+  { name: 'Yer Altı', obstacles: [{ x: W / 2, y: H / 2, r: 56 }] },
+  { name: 'Sanayi',   obstacles: [] },
+];
+let mapIdx = 0;
 
 let state = 'ready';
 let scoreP = 0, scoreA = 0;
@@ -74,6 +93,21 @@ const ball = { x:W/2, y:H/2, vx:0, vy:0, speed:BALL_SPEED0, prevX:W/2 };
 
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const lerp  = (a,b,t) => a + (b - a) * t;
+
+/* ================= HARİTA SEÇİMİ ================= */
+const mapBtns = [0,1,2,3].map(i => document.getElementById('mapBtn' + i));
+function setMap(i){
+  mapIdx = clamp(i, 0, MAPS.length - 1);
+  localStorage.setItem('pong_map', String(mapIdx));
+  mapBtns.forEach((b, j) => {
+    b.style.background = (j === mapIdx) ? '#2a3a5a' : '';
+    b.style.color      = (j === mapIdx) ? '#fff' : '';
+    b.style.borderColor= (j === mapIdx) ? '#4fe3ff' : '';
+  });
+}
+function cycleMap(d){ setMap((mapIdx + d + MAPS.length) % MAPS.length); }
+mapBtns.forEach((b, i) => { b.onclick = () => setMap(i); });
+setMap(parseInt(localStorage.getItem('pong_map') || '0', 10) || 0);
 
 /* ================= SES (WebAudio sentez — dosya yok) ================= */
 let AC = null, master = null;
@@ -224,6 +258,7 @@ async function askBrain(dtMs){
     missed_player: missedFlag, dtMs: dtMs,
     diff: diff,
     term: termMode,
+    obstacles: MAPS[mapIdx].obstacles,   // harita engelleri (beyin tahmine katar)
   };
   missedFlag = false;
   try {
@@ -261,7 +296,17 @@ function localBrain(dtMs){
     const dist = (ai.x - BALL_R) - ball.x;
     if (dist < engage) {
       let x=ball.x, y=ball.y, vx=ball.vx, vy=ball.vy;
-      for (let i=0;i<500 && x<ai.x-BALL_R;i++){ x+=vx; y+=vy; if(y<BALL_R||y>H-BALL_R) vy=-vy; }
+      const obs = MAPS[mapIdx].obstacles;
+      for (let i=0;i<500 && x<ai.x-BALL_R;i++){
+        x+=vx; y+=vy;
+        if(y<BALL_R||y>H-BALL_R) vy=-vy;
+        for (const ob of obs) {
+          const dx=x-ob.x, dy=y-ob.y, rr=ob.r+BALL_R, d2=dx*dx+dy*dy;
+          if (d2<rr*rr){ const d=Math.sqrt(d2)||0.001, nx=dx/d, ny=dy/d;
+            x=ob.x+nx*rr; y=ob.y+ny*rr;
+            const dot=vx*nx+vy*ny; vx-=2*dot*nx; vy-=2*dot*ny; }
+        }
+      }
       // Alev modunda saf kesişim; normalde kısmen tahmin
       target = termMode ? y : lerp(ball.y, y, s);
     } else target = H/2 + (ball.y - H/2)*0.3;
@@ -278,7 +323,16 @@ function reset(){
   state = 'ready';
 }
 function serve(dir){
+  // Güvenli başlangıç: harita engeli varsa topun doğduğu nokta engele gömülmesin
   ball.x = W/2; ball.y = H/2; ball.speed = BALL_SPEED0;
+  for (const ob of MAPS[mapIdx].obstacles) {
+    const rr = ob.r + BALL_R + 24;
+    if (Math.hypot(ball.x - ob.x, ball.y - ob.y) < rr) {
+      ball.x = ob.x;                 // engel ekseni üstünde kal
+      ball.y = ob.y - rr;            // hemen üstüne kon
+      if (ball.y < 30) ball.y = ob.y + rr;   // üst dar ise alta
+    }
+  }
   ball.prevX = ball.x;
   const a = (Math.random()*0.6 - 0.3) * Math.PI;
   ball.vx = Math.cos(a) * ball.speed * dir;
@@ -320,6 +374,9 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') { e.preventDefault(); startOrServe(); }
   if (k === 'r') reset();
   if (k === 'l') clearMemory();
+  if (k >= '1' && k <= '4') setMap(parseInt(k, 10) - 1);
+  if (k === 'q') cycleMap(-1);
+  if (k === 'e') cycleMap(1);
 });
 addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 canvas.addEventListener('mousemove', e => {
@@ -367,6 +424,19 @@ function update(now){
   if (ball.y - BALL_R < 0) { ball.y = BALL_R; ball.vy = Math.abs(ball.vy); S.wall(); }
   if (ball.y + BALL_R > H) { ball.y = H - BALL_R; ball.vy = -Math.abs(ball.vy); S.wall(); }
 
+  // Harita engelleri (Yer Altı: orta metal daire) — top normal boyunca seker
+  for (const ob of MAPS[mapIdx].obstacles) {
+    const dx = ball.x - ob.x, dy = ball.y - ob.y;
+    const rr = ob.r + BALL_R, d2 = dx*dx + dy*dy;
+    if (d2 < rr*rr) {
+      const d = Math.sqrt(d2) || 0.001, nx = dx/d, ny = dy/d;
+      ball.x = ob.x + nx*rr; ball.y = ob.y + ny*rr;
+      const dot = ball.vx*nx + ball.vy*ny;
+      ball.vx -= 2*dot*nx; ball.vy -= 2*dot*ny;
+      S.wall();
+    }
+  }
+
   if (ball.vx < 0) {
     const face = player.x + player.w;
     if (ball.prevX - BALL_R >= face && ball.x - BALL_R <= face &&
@@ -403,6 +473,85 @@ function overlay(title, sub){
   ctx.fillStyle = '#fff'; ctx.font = 'bold 46px "Courier New", monospace';
   ctx.fillText(title, W/2, H/2 - 10);
   if (sub){ ctx.font = '20px "Courier New", monospace'; ctx.fillStyle = '#9fd'; ctx.fillText(sub, W/2, H/2 + 30); }
+}
+/* ================= HARİTA ARKA PLANLARI ================= */
+// Boşluk: sabit yıldız alanı + gezegen
+const stars = [];
+(function(){ let s = 12345;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 90; i++) stars.push({ x: rnd()*W, y: rnd()*H, r: 0.5 + rnd()*1.7, p: rnd()*Math.PI*2 });
+})();
+function drawSpace(now){
+  const g = ctx.createRadialGradient(W*0.25, H*0.3, 60, W*0.25, H*0.3, 520);
+  g.addColorStop(0, 'rgba(60,30,90,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.globalAlpha = 0.3;
+  const pg = ctx.createRadialGradient(W*0.8, H*0.78, 4, W*0.8, H*0.78, 46);
+  pg.addColorStop(0, '#3a2a55'); pg.addColorStop(1, '#0c0618');
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(W*0.8, H*0.78, 44, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  for (const st of stars) {
+    const tw = 0.35 + 0.65*Math.abs(Math.sin(now/700 + st.p));
+    ctx.fillStyle = `rgba(200,220,255,${tw*0.8})`;
+    ctx.fillRect(st.x, ((st.y + now*0.01*st.r) % (H+8)) - 4, st.r, st.r);
+  }
+}
+function drawUnderground(now){
+  for (const yy of [0, H-18]) {           // üst/alt boru + perçinler
+    const g = ctx.createLinearGradient(0, yy, 0, yy+18);
+    g.addColorStop(0, '#232b33'); g.addColorStop(1, '#0d1116');
+    ctx.fillStyle = g; ctx.fillRect(0, yy, W, 18);
+    ctx.strokeStyle = 'rgba(90,110,130,0.25)';
+    for (let x = 20; x < W; x += 60){ ctx.beginPath(); ctx.arc(x, yy+9, 3, 0, Math.PI*2); ctx.stroke(); }
+  }
+  ctx.fillStyle = 'rgba(40,50,60,0.5)';   // yan raylar
+  ctx.fillRect(0, 18, 6, H-36); ctx.fillRect(W-6, 18, 6, H-36);
+  const g2 = ctx.createRadialGradient(W/2, H/2, 80, W/2, H/2, 320);
+  g2.addColorStop(0, 'rgba(40,80,60,0.12)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g2; ctx.fillRect(0,0,W,H);
+}
+function drawIndustry(now){
+  const glow = 0.10 + 0.06*Math.sin(now/500);
+  for (const bx of [12, W-22]) {         // yan parlayan çelik barlar
+    const g = ctx.createLinearGradient(bx, 0, bx+10, 0);
+    g.addColorStop(0, 'rgba(120,70,20,0)');
+    g.addColorStop(0.5, `rgba(255,150,40,${glow})`);
+    g.addColorStop(1, 'rgba(120,70,20,0)');
+    ctx.fillStyle = g; ctx.fillRect(bx, 24, 10, H-48);
+  }
+  ctx.strokeStyle = 'rgba(120,80,30,0.18)';   // üst/alt ızgara
+  for (let x = 40; x < W; x += 80) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, H); ctx.lineTo(x, H-14); ctx.stroke();
+  }
+  const g = ctx.createRadialGradient(W/2, H*0.5, 100, W/2, H*0.5, 380);
+  g.addColorStop(0, 'rgba(120,50,10,0.10)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+}
+function drawObstacles(now){
+  for (const ob of MAPS[mapIdx].obstacles) {
+    ctx.save();
+    const g = ctx.createRadialGradient(ob.x-ob.r*0.3, ob.y-ob.r*0.3, 4, ob.x, ob.y, ob.r);
+    g.addColorStop(0, '#4a5560'); g.addColorStop(0.7, '#232a31'); g.addColorStop(1, '#0e1114');
+    ctx.shadowColor = '#4fe3ff'; ctx.shadowBlur = 12;
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ob.x, ob.y, ob.r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(140,160,180,0.35)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ob.x, ob.y, ob.r-4, 0, Math.PI*2); ctx.stroke();
+    for (let i = 0; i < 8; i++) {         // dönen perçinler
+      const a = i/8*Math.PI*2 + now/4000;
+      ctx.fillStyle = 'rgba(160,180,200,0.4)';
+      ctx.beginPath(); ctx.arc(ob.x+Math.cos(a)*(ob.r-10), ob.y+Math.sin(a)*(ob.r-10), 2.4, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+function drawMapBg(now){
+  if (mapIdx === 1) drawSpace(now);
+  else if (mapIdx === 2) drawUnderground(now);
+  else if (mapIdx === 3) drawIndustry(now);
+  drawTerminator(now);
+  drawObstacles(now);
 }
 function drawTerminator(now){
   // Silik, karanlık, gözlüklü Terminator — arka plan (hafif belli)
@@ -446,7 +595,7 @@ function drawTerminator(now){
 }
 function render(){
   ctx.clearRect(0,0,W,H);
-  drawTerminator(performance.now());
+  drawMapBg(performance.now());
   ctx.setLineDash([12,14]); ctx.strokeStyle = 'rgba(120,150,200,0.25)'; ctx.lineWidth = 3;
   ctx.beginPath();
   for (let y=0; y<=H; y+=26){ ctx.moveTo(W/2,y); ctx.lineTo(W/2,y+13); }

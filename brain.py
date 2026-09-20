@@ -149,7 +149,7 @@ def pick_target_zone():
     return ZONES - 1
 
 # ---- Smaç nişancılığı: raketin tam nerede durması gerektiğini simülasyonla seç ----
-def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y):
+def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y, obstacles=None):
     """Raket ai_y'de olsa topun oyuncu yüzüne varacağı y'yi hesapla."""
     # smaç: top ai yüzüne çarpıyor, çıkış açısı raket merkezine göre
     rel = clamp((ball_y - (ai_y + PAD_H / 2)) / (PAD_H / 2), -1, 1)
@@ -159,6 +159,7 @@ def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y):
     # topun çıkış noktası: ai yüzü
     x = AI_FACE_X - BALL_R
     y = ball_y
+    obs = obstacles or []
     for _ in range(600):
         x -= nvx
         y += nvy
@@ -166,11 +167,21 @@ def _simulate_hit(ai_y, ball_x, ball_y, vx, vy, speed, target_y):
             y = BALL_R; nvy = abs(nvy)
         elif y > H - BALL_R:
             y = H - BALL_R; nvy = -abs(nvy)
+        for ob in obs:
+            dx, dy = x - ob["x"], y - ob["y"]
+            rr = ob["r"] + BALL_R
+            d2 = dx*dx + dy*dy
+            if d2 < rr*rr:
+                d = math.sqrt(d2) or 0.001
+                nx, ny = dx/d, dy/d
+                x = ob["x"] + nx*rr; y = ob["y"] + ny*rr
+                dot = nvx*nx + nvy*ny
+                nvx -= 2*dot*nx; nvy -= 2*dot*ny
         if x <= PLAYER_FACE_X:
             return y
     return y
 
-def _aim_shot(ball_x, ball_y, vx, vy, speed, P):
+def _aim_shot(ball_x, ball_y, vx, vy, speed, P, obstacles=None):
     """Hedef bölge seç, 60 aday raket konumu simüle et, en yakınına yerleş."""
     z = pick_target_zone()
     _memory["last_target"] = z
@@ -188,7 +199,7 @@ def _aim_shot(ball_x, ball_y, vx, vy, speed, P):
         candidates.append(lo + (hi - lo) * i / 59.0)
     # beceri düşüklüğünde aday kümesine rastgele dağılma
     for cy in candidates:
-        d = abs(_simulate_hit(cy, ball_x, ball_y, vx, vy, speed, target_y) - target_y)
+        d = abs(_simulate_hit(cy, ball_x, ball_y, vx, vy, speed, target_y, obstacles) - target_y)
         d += random.random() * P["error"] * (1 - P["s"])
         if d < best_d:
             best_d = d
@@ -196,17 +207,29 @@ def _aim_shot(ball_x, ball_y, vx, vy, speed, P):
     # raket y (üst köşe) = merkez - PAD_H/2
     return clamp(best_y - PAD_H / 2, 0, H - PAD_H), z
 
-# ---- Yörünge tahmini (top sağa gidiyorsa) ----
-def predict_y(target_x, ball_x, ball_y, vx, vy):
+# ---- Yörünge tahmini (top sağa gidiyorsa; harita engellerini de taklit eder) ----
+def predict_y(target_x, ball_x, ball_y, vx, vy, obstacles=None):
     if vx <= 0:
         return H / 2
+    obs = obstacles or []
     x, y = ball_x, ball_y
-    for _ in range(600):
+    for _ in range(900):
         x += vx; y += vy
         if y < BALL_R:
             y = BALL_R; vy = abs(vy)
         elif y > H - BALL_R:
             y = H - BALL_R; vy = -abs(vy)
+        # Daire engeller: top normal boyunca seker (istemciyle aynı fizik)
+        for ob in obs:
+            dx, dy = x - ob["x"], y - ob["y"]
+            rr = ob["r"] + BALL_R
+            d2 = dx*dx + dy*dy
+            if d2 < rr*rr:
+                d = math.sqrt(d2) or 0.001
+                nx, ny = dx/d, dy/d
+                x = ob["x"] + nx*rr; y = ob["y"] + ny*rr
+                dot = vx*nx + vy*ny
+                vx -= 2*dot*nx; vy -= 2*dot*ny
         if x >= target_x:
             return y
     return y
@@ -257,6 +280,7 @@ def brain(state):
     speed = state.get("speed", 6)
     ai_y = state.get("ay", H / 2 - PAD_H / 2)
     phase = state.get("phase", "playing")
+    obstacles = state.get("obstacles") or []
 
     target = H / 2
     engaged = False
@@ -271,8 +295,8 @@ def brain(state):
     if phase == "playing" and vx > 0:
         dist = (AI_FACE_X - BALL_R) - bx
         if dist < P["engage"]:
-            # ---- KESİŞİM TAHMİNİ: topun AI yüzüne varacağı y ----
-            hit_y = predict_y(AI_FACE_X - BALL_R, bx, by, vx, vy)
+            # ---- KESİŞİM TAHMİNİ: topun AI yüzüne varacağı y (harita engelleri dahil) ----
+            hit_y = predict_y(AI_FACE_X - BALL_R, bx, by, vx, vy, obstacles)
             if term:
                 # ---- JUDGMENT DAY: saf kesişim, sıfır hata, sıfır ofset ----
                 # Rakip "terminatör" gibi topu tam kesişim noktasında bekler;
