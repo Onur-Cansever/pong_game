@@ -662,31 +662,34 @@ function drawMapBg(now){
            E göz (dinamik) N burun gölgesi  M ağız  C iz  N2 boyun
    Gözler E harfleriyle işaretleniyor, çizim sırasında termMode'a göre parlar. */
 const TERM_ART = [
-"......HHHHHHHH......",
-"....HHSSSSSSSSHH....",
-"...HSSSSSSSSSSSSH...",
-"..HSSSSSSSSSSSSSSH..",
-"..HSSSSSSSSSSSSSSH..",
-"..HSSSSSSSSSSSSSSH..",
-"..HBBBBBBBBBBBBBBH..",
-"..HBBBBBBBBBBBBBBH..",
-"..HSSWWSSWWWWSSSSH..",
-"..HSWEEWWWWEEWSSSH..",
-"..HSSWWWWWWWWWWSSH..",
-"..HDDSSSNNNSSSSDDH..",
-"..HDSNNSSSSNNSSSDH..",
-"..HDDSSSSSSSSSSDDH..",
-"..HDDSSMMSSMMSSDDH..",
-"...HDDSSSSSSSSDDH...",
-"....DDDSSSSSSDDH....",
-"......NNNNNNNN......",
-".....N2SSSSSSN2.....",
-".....N2SSSSSSN2.....",
-"....N2SSSSSSSSN2....",
-"....N2NNNNNNNNN2....",
+"......SSSSSSSS........",
+"....SSSSSSSSSSSSSS....",
+"...SSSSSSSSSSSSSSSS...",
+"..SSSSSSSSSSSSSSSSSS..",
+"..SSSSSSSSSSSSSSSSSS..",
+"..SSSSSSSSSSSSSSSSSS..",
+"..SBBBBBBBBBBBBBBBB...",
+"..SBBBBBBBBBBBBBBBB...",
+"..SWWWWWNNWWWWWWWW....",
+"..SWLWWWNNWWLWWWWW....",
+"..SWWWWNNWWWWWWWW.....",
+"..SDDSSSSSSSSSSDD.....",
+"..SDDSSSNNNSSSDDX.....",
+"..SDDSSSNNNSSSDDXX....",
+"...DDSSMMSSMMDDXXCE...",
+"....DDSSSSSSSSDD......",
+".....DDSSSSSSDD.......",
+"......DDDDDDDD........",
+"......NNNNNNNN........",
+".....N2SSSSSSN2.......",
+".....N2SSSSSSN2.......",
+"....N2SSSSSSSSN2......",
+"....N2NNNNNNNNN2......",
+"......................",
 ];
-const TERM_TONE = { H:'#7d848f', S:'#5b636e', D:'#3a404a', B:'#14171c',
-  W:'#07080b', N:'#454c57', M:'#1c2027', C:'#4a5560', N2:'#23272e' };
+const TERM_TONE = { S:'#5b636e', D:'#3a404a', B:'#14171c',
+  W:'#07080b', L:'rgba(160,205,240,0.4)', N:'#454c57', M:'#1c2027',
+  X:'#22262d', C:'#e8ebef', E:'#ff8a2a', N2:'#23272e' };
 let termMouthOpen = 0;   // 0..1 — AI kazandığında ağız açılır (kahkaha animasyonu)
 function drawTerminator(now){
   // Silik, karanlık, gözlü Terminator — arka plan (hafif belli)
@@ -707,35 +710,72 @@ function drawTerminator(now){
       const jit = ((r * 31 + c * 17) % 7) / 7 * 0.16;
       ctx.fillStyle = shade(col, -jit);
       ctx.fillRect(ox + c*px, oy + r*px, px - 1, px - 1);
-      // Yanağın yanık izi (T800) — sağ yanağa ince koyu çizgi
-      if (ch === 'S' && c >= 12 && c <= 13 && r >= 11 && r <= 15) {
-        ctx.fillStyle = 'rgba(20,22,28,0.5)';
-        ctx.fillRect(ox + c*px, oy + r*px, 2, px - 1);
-      }
     }
   }
-  // Gözler (E): termMode'da kızıl alev, yoksa soluk turuncu; AI kazanınca genişler
-  const eyeCols = [[3,4],[9,10]];  // 2. göz E çiftleri (r=9)
-  const eyeR = (termMode ? 4.6 : 3.2) + (termMouthOpen > 0.3 ? 1.2 : 0);
+  // Gözler gözlük camlarının ARKASINDA (koyu cam + hafif parlama + sıcak çekirdek)
+  const eyeCols = [[3,7],[12,16]];      // cam aralıkları (r=8..10)
   const eyeY = oy + 9*px + px/2;
-  ctx.shadowColor = termMode ? '#ff3a0a' : '#ff7a00';
-  ctx.shadowBlur = termMode ? 26 : 12;
-  ctx.fillStyle = termMode ? `rgba(255,64,16,${0.9+flick*0.1})` : `rgba(255,120,40,${0.55+flick*0.35})`;
+  ctx.fillStyle = 'rgba(6,8,12,0.85)';  // cam gölgesi
   eyeCols.forEach(([a,b]) => {
     ctx.beginPath();
-    ctx.ellipse(ox + (a+b+1)/2*px, eyeY, (b-a+1)*px*0.55*eyeR/3.2, eyeR*0.72, 0, 0, Math.PI*2);
+    ctx.roundRect(ox + a*px - 1, oy + 8*px, (b-a+1)*px + 2, 3*px, 3);
+    ctx.fill();
+  });
+  ctx.shadowColor = termMode ? '#ff3a0a' : '#ff7a00';
+  ctx.shadowBlur = termMode ? 22 : 9;
+  const hot = termMode ? `rgba(255,64,16,${0.8+flick*0.2})` : `rgba(255,120,40,${0.4+flick*0.3})`;
+  ctx.fillStyle = hot;
+  eyeCols.forEach(([a,b]) => {
+    ctx.beginPath();
+    ctx.ellipse(ox + (a+b+1)/2*px, eyeY, (b-a)*px*0.42, px*0.5, 0, 0, Math.PI*2);
     ctx.fill();
   });
   ctx.shadowBlur = 0;
-  // Ağız: M harfleri normalde koyu çizgi; AI kazandığında açılır (kahkaha)
+  // Gözlük çerçevesi (kalın krom) + köprü + saplar
+  ctx.strokeStyle = 'rgba(170,180,195,0.8)';
+  ctx.lineWidth = 2.4;
+  eyeCols.forEach(([a,b]) => {
+    ctx.strokeRect(ox + a*px - 1.5, oy + 8*px - 1.5, (b-a+1)*px + 3, 3*px + 1);
+  });
+  ctx.beginPath();
+  ctx.moveTo(ox + 8*px, oy + 9*px); ctx.lineTo(ox + 12*px, oy + 9*px); ctx.stroke();   // köprü
+  ctx.beginPath(); ctx.moveTo(ox + 2*px, oy + 9*px); ctx.lineTo(ox - 2*px, oy + 8*px); ctx.stroke(); // sap
+  // Cam parlaması (L harfleri zaten gridde; ekstra ince çizgi)
+  ctx.strokeStyle = 'rgba(190,225,250,0.22)'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(ox + 4*px, oy + 8.3*px); ctx.lineTo(ox + 6*px, oy + 10.6*px); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox + 13*px, oy + 8.3*px); ctx.lineTo(ox + 15*px, oy + 10.6*px); ctx.stroke();
+  // SİGARA: ağzın sağ köşesinden dışarı (C beyaz gövde, E kor ucu)
+  const smX = ox + 16*px, smY = oy + 14.6*px;
+  ctx.save();
+  ctx.translate(smX, smY);
+  ctx.rotate(-0.18);
+  ctx.fillStyle = '#e8ebef'; ctx.fillRect(-6, -1.6, 26, 3.2);          // gövde
+  ctx.fillStyle = '#ff8a2a'; ctx.fillRect(20, -1.6, 5, 3.2);           // filtre
+  ctx.shadowColor = '#ff5a1a'; ctx.shadowBlur = 8 + 5*flick;
+  ctx.fillStyle = `rgba(255,110,40,${0.85+0.15*flick})`;
+  ctx.beginPath(); ctx.arc(25, 0, 2.2 + 0.7*flick, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  // DUMAN: uçuşan küçük bulutlar (now'den faz alır)
+  ctx.save();
+  for (let i = 0; i < 4; i++) {
+    const ph = (now/2400 + i*0.25) % 1;          // 0..1 sürekli
+    const sx = smX + 26 - 8*Math.sin(ph*Math.PI) - ph*14 + Math.sin((now/900)+i)*3;
+    const sy = smY - 10 - ph*86;
+    const rr = 3 + ph*9;
+    ctx.globalAlpha = (1-ph) * 0.16 * (0.6+0.4*flick);
+    ctx.fillStyle = '#b9c4cf';
+    ctx.beginPath(); ctx.arc(sx, sy, rr, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+  // Ağız: AI kazanınca açılır (kahkaha); sigara yerinde kalır
   if (termMouthOpen > 0.05) {
     const mo = termMouthOpen;
-    ctx.fillStyle = `rgba(8,6,6,${0.75*mo})`;
-    const mx = ox + 5*px, my = oy + 14*px - 2, mw = 8*px, mh = (3+7*mo)*px*0.55;
+    ctx.fillStyle = `rgba(8,6,6,${0.7*mo})`;
+    const mx = ox + 6*px, my = oy + 14*px, mw = 7*px, mh = (2+6*mo)*px*0.42;
     ctx.beginPath();
     ctx.ellipse(mx + mw/2, my + mh/2, mw/2, mh/2, 0, 0, Math.PI*2);
     ctx.fill();
-    ctx.fillStyle = `rgba(255,70,30,${0.35*mo*flick})`;   // ağız içinden alev sızıntısı
+    ctx.fillStyle = `rgba(255,70,30,${0.3*mo*flick})`;
     ctx.beginPath();
     ctx.ellipse(mx + mw/2, my + mh*0.72, mw*0.3, mh*0.26, 0, 0, Math.PI*2);
     ctx.fill();
