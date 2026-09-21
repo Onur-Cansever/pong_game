@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pong sunucu: statik dosyalar + /brain (AI) endpoint'i. Bağımlılık yok."""
-import json, os, sys
+import json, os, sys, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -57,6 +57,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps(out))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/shutdown":
+            # Sunucuyu kapat (oyun içi EXIT butonu). Cevap bitmeden ölmeyi ertele.
+            threading.Timer(0.3, os._exit, args=(0,)).start()
+            self._send(200, json.dumps({"ok": True, "msg": "sunucu kapanıyor"}))
         else:
             self._send(404, "{}")
 

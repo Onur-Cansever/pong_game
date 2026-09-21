@@ -27,6 +27,9 @@
   button{ background:#1a2338; color:#9fd; border:1px solid #2a3a5a; border-radius:6px;
     font-family:inherit; font-size:12px; padding:4px 10px; cursor:pointer; letter-spacing:1px; }
   button:hover{ background:#243350; }
+  #exitBtn{ background:#2a0d10; color:#ff5d5d; border:1px solid #5a1a1a; font-weight:bold;
+    letter-spacing:2px; text-shadow:0 0 8px rgba(255,60,40,.6); }
+  #exitBtn:hover{ background:#3a1114; box-shadow:0 0 14px rgba(255,50,30,.35); }
   .term{ font-size:12px; color:#ff5a2a; letter-spacing:2px; font-weight:bold;
     text-shadow:0 0 10px #ff3a0a; opacity:0; transition:opacity .2s; }
   .term.on{ opacity:1; animation:termflick .5s infinite alternate; }
@@ -53,6 +56,7 @@
     <span>Zayıf bölge: <b id="zoneBox">0/10</b></span>
     <button id="sndBtn">SES: AÇIK</button>
     <button id="memBtn">HAFIZAYI SIFIRLA</button>
+    <button id="exitBtn">EXIT</button>
   </div>
 <script>
 const canvas = document.getElementById('game');
@@ -167,6 +171,36 @@ const S = {
   lost:      () => { blip(300,0.16,'sawtooth',0.35,200); setTimeout(()=>blip(200,0.2,'sawtooth',0.3,120),110); },
   win:  () => { [523,659,784,1047].forEach((f,i)=>setTimeout(()=>blip(f,0.18,'square',0.4),i*110)); },
   lose: () => { [400,330,270,170].forEach((f,i)=>setTimeout(()=>blip(f,0.24,'sawtooth',0.4),i*150)); },
+  // AI kahkahası (sentez): kısa kesik "ha-ha-ha" patlamaları + karanlık formlar
+  laugh: () => {
+    if (!soundOn) return;
+    try {
+      const ac = audio(), t0 = ac.currentTime;
+      const bands = [
+        { f: 300, q: 9,  g: 0.55 },   // "h" üflemesi
+        { f: 560, q: 12, g: 0.30 },   // "a" formanı
+        { f: 840, q: 14, g: 0.12 },
+      ];
+      const bursts = [0, 140, 280, 460, 640, 880];   // her "ha" ~140-260ms'de, sonu uzar
+      bursts.forEach((off, bi) => {
+        const dur = 0.11 + bi * 0.015, f0 = 210 + Math.random() * 40 - bi * 6;
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(f0, t0 + off/1000);
+        o.frequency.exponentialRampToValueAtTime(f0 * 0.82, t0 + off/1000 + dur);
+        g.gain.setValueAtTime(0.0001, t0 + off/1000);
+        g.gain.exponentialRampToValueAtTime(0.5, t0 + off/1000 + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + off/1000 + dur);
+        o.connect(g);
+        bands.forEach(b => {
+          const bp = ac.createBiquadFilter();
+          bp.type = 'bandpass'; bp.frequency.value = b.f; bp.Q.value = b.q;
+          const bg = ac.createGain(); bg.gain.value = b.g;
+          g.connect(bp); bp.connect(bg); bg.connect(master);
+        });
+        o.start(t0 + off/1000); o.stop(t0 + off/1000 + dur + 0.05);
+      });
+    } catch(e){}
+  },
 };
 sndBtn.onclick = () => { soundOn = !soundOn; localStorage.setItem('pong_sound', soundOn?'on':'off'); updateSndBtn(); };
 updateSndBtn();
@@ -312,6 +346,17 @@ async function clearMemory(){
 }
 document.getElementById('memBtn').onclick = clearMemory;
 
+/* EXIT: sunucuyu öldür (POST /shutdown) */
+document.getElementById('exitBtn').onclick = () => {
+  if (!confirm('Sunucu kapatılsın mı? (oyun ve beyin hafızası durur)')) return;
+  fetch('/shutdown', { method: 'POST' }).catch(()=>{});
+  document.body.style.transition = 'opacity .6s';
+  setTimeout(() => { document.body.style.opacity = '0'; }, 60);
+  setTimeout(() => { document.body.innerHTML =
+    '<div style="color:#ff5a2a;font-family:monospace;font-size:20px;padding:40px;text-align:center">' +
+    'KAPANIYOR...<br><small style="color:#7a5">sunucu durduruldu</small></div>'; }, 700);
+};
+
 /* Yerel yedek AI (beyin yanıt vermezse) */
 let aiTarget = null;
 let localSkill = localBase;
@@ -388,7 +433,8 @@ function afterPoint(dir){
   if (scoreP >= WIN_SCORE || scoreA >= WIN_SCORE) {
     state = 'gameover';
     winner = scoreP >= WIN_SCORE ? 'SEN' : 'BİLGİSAYAR';
-    if (scoreP >= WIN_SCORE) S.win(); else S.lose();
+    if (scoreP >= WIN_SCORE) S.win();
+    else { S.lose(); S.laugh(); }          // AI kazanınca kahkaha
     return;
   }
   serveDir = dir;
@@ -609,45 +655,98 @@ function drawMapBg(now){
   drawTerminator(now);
   drawObstacles(now);
 }
+/* ============ T2 ARNOLD — PIXEL ART (20x22 ızgara) ============
+   Referans: T2: Judgment Day — kelle, yoğun kaş kemeri, gömük göz çukurları,
+   geniş burun, kalın çene, yanağında yanık/kesik izi (T800).
+   Tonlar: '.' şeffaf  H kafa ıtırığı  S cilt  D gölge  B kaş  W çukur
+           E göz (dinamik) N burun gölgesi  M ağız  C iz  N2 boyun
+   Gözler E harfleriyle işaretleniyor, çizim sırasında termMode'a göre parlar. */
+const TERM_ART = [
+"......HHHHHHHH......",
+"....HHSSSSSSSSHH....",
+"...HSSSSSSSSSSSSH...",
+"..HSSSSSSSSSSSSSSH..",
+"..HSSSSSSSSSSSSSSH..",
+"..HSSSSSSSSSSSSSSH..",
+"..HBBBBBBBBBBBBBBH..",
+"..HBBBBBBBBBBBBBBH..",
+"..HSSWWSSWWWWSSSSH..",
+"..HSWEEWWWWEEWSSSH..",
+"..HSSWWWWWWWWWWSSH..",
+"..HDDSSSNNNSSSSDDH..",
+"..HDSNNSSSSNNSSSDH..",
+"..HDDSSSSSSSSSSDDH..",
+"..HDDSSMMSSMMSSDDH..",
+"...HDDSSSSSSSSDDH...",
+"....DDDSSSSSSDDH....",
+"......NNNNNNNN......",
+".....N2SSSSSSN2.....",
+".....N2SSSSSSN2.....",
+"....N2SSSSSSSSN2....",
+"....N2NNNNNNNNN2....",
+];
+const TERM_TONE = { H:'#7d848f', S:'#5b636e', D:'#3a404a', B:'#14171c',
+  W:'#07080b', N:'#454c57', M:'#1c2027', C:'#4a5560', N2:'#23272e' };
+let termMouthOpen = 0;   // 0..1 — AI kazandığında ağız açılır (kahkaha animasyonu)
 function drawTerminator(now){
-  // Silik, karanlık, gözlüklü Terminator — arka plan (hafif belli)
+  // Silik, karanlık, gözlü Terminator — arka plan (hafif belli)
   const flick = 0.5 + 0.5*Math.sin(now/900)*Math.sin(now/570);
-  const cx = W/2, top = 70;
+  termMouthOpen += ((state === 'gameover' && winner === 'BİLGİSAYAR' ? 1 : 0) - termMouthOpen) * 0.08;
+  const cx = W/2, top = 46, px = 9;    // px: piksel boyutu
+  const cols = TERM_ART[0].length, rows = TERM_ART.length;
+  const ox = cx - cols*px/2, oy = top;
   ctx.save();
-  ctx.globalAlpha = 0.10 + 0.05*flick;        // çok silik
-  ctx.translate(cx, top);
-  // Kafa (metalik krom)
-  const kg = ctx.createLinearGradient(0,0,0,150);
-  kg.addColorStop(0,'#2a2d33'); kg.addColorStop(0.5,'#4a4f57'); kg.addColorStop(1,'#1a1c20');
-  ctx.fillStyle = kg;
-  ctx.beginPath();
-  ctx.moveTo(-70,40); ctx.lineTo(-58,0); ctx.lineTo(58,0); ctx.lineTo(70,40);
-  ctx.lineTo(62,140); ctx.lineTo(40,170); ctx.lineTo(-40,170); ctx.lineTo(-62,140);
-  ctx.closePath(); ctx.fill();
-  // Alın çizgileri (krom parçaları)
-  ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=2;
-  for(let i=0;i<4;i++){ ctx.beginPath(); ctx.moveTo(-50+i*3,18+i*2); ctx.lineTo(50-i*3,18+i*2); ctx.stroke(); }
-  // Göz çukurları (karanlık)
-  ctx.fillStyle='rgba(0,0,0,0.55)';
-  ctx.beginPath(); ctx.ellipse(-32,60,22,15,0,0,7); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(32,60,22,15,0,0,7); ctx.fill();
-  // Işınan gözler (alev modunda parlak)
-  const eyeCol = termMode ? `rgba(255,60,10,${0.85+flick*0.15})` : `rgba(255,120,40,${0.5+flick*0.4})`;
+  ctx.globalAlpha = 0.30 + 0.10*flick;  // "silik ama belli"
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = TERM_ART[r][c];
+      if (ch === '.' || ch === 'E') continue;
+      // Göz bölgesi: E yerine dinamik parlama (termMode'a göre sıcak)
+      let col = (ch === 'N2') ? TERM_TONE.N2 : TERM_TONE[ch] || TERM_TONE.S;
+      // Hafif doku: her pikseli deterministik ama satıra göre karanlıklaştır
+      const jit = ((r * 31 + c * 17) % 7) / 7 * 0.16;
+      ctx.fillStyle = shade(col, -jit);
+      ctx.fillRect(ox + c*px, oy + r*px, px - 1, px - 1);
+      // Yanağın yanık izi (T800) — sağ yanağa ince koyu çizgi
+      if (ch === 'S' && c >= 12 && c <= 13 && r >= 11 && r <= 15) {
+        ctx.fillStyle = 'rgba(20,22,28,0.5)';
+        ctx.fillRect(ox + c*px, oy + r*px, 2, px - 1);
+      }
+    }
+  }
+  // Gözler (E): termMode'da kızıl alev, yoksa soluk turuncu; AI kazanınca genişler
+  const eyeCols = [[3,4],[9,10]];  // 2. göz E çiftleri (r=9)
+  const eyeR = (termMode ? 4.6 : 3.2) + (termMouthOpen > 0.3 ? 1.2 : 0);
+  const eyeY = oy + 9*px + px/2;
   ctx.shadowColor = termMode ? '#ff3a0a' : '#ff7a00';
-  ctx.shadowBlur = termMode ? 30 : 14;
-  ctx.fillStyle = eyeCol;
-  ctx.beginPath(); ctx.ellipse(-32,60,12,7,0,0,7); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(32,60,12,7,0,0,7); ctx.fill();
+  ctx.shadowBlur = termMode ? 26 : 12;
+  ctx.fillStyle = termMode ? `rgba(255,64,16,${0.9+flick*0.1})` : `rgba(255,120,40,${0.55+flick*0.35})`;
+  eyeCols.forEach(([a,b]) => {
+    ctx.beginPath();
+    ctx.ellipse(ox + (a+b+1)/2*px, eyeY, (b-a+1)*px*0.55*eyeR/3.2, eyeR*0.72, 0, 0, Math.PI*2);
+    ctx.fill();
+  });
   ctx.shadowBlur = 0;
-  // Ağız / çene (krom)
-  ctx.strokeStyle='rgba(255,255,255,0.14)';
-  ctx.beginPath(); ctx.moveTo(-18,110); ctx.lineTo(18,110); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-10,125); ctx.lineTo(10,125); ctx.stroke();
-  // Gövde ipuçları (omuzlar)
-  ctx.fillStyle='rgba(40,44,52,0.7)';
-  ctx.beginPath(); ctx.moveTo(-95,175); ctx.lineTo(-55,168); ctx.lineTo(-55,210); ctx.lineTo(-100,215); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(95,175); ctx.lineTo(55,168); ctx.lineTo(55,210); ctx.lineTo(100,215); ctx.closePath(); ctx.fill();
+  // Ağız: M harfleri normalde koyu çizgi; AI kazandığında açılır (kahkaha)
+  if (termMouthOpen > 0.05) {
+    const mo = termMouthOpen;
+    ctx.fillStyle = `rgba(8,6,6,${0.75*mo})`;
+    const mx = ox + 5*px, my = oy + 14*px - 2, mw = 8*px, mh = (3+7*mo)*px*0.55;
+    ctx.beginPath();
+    ctx.ellipse(mx + mw/2, my + mh/2, mw/2, mh/2, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,70,30,${0.35*mo*flick})`;   // ağız içinden alev sızıntısı
+    ctx.beginPath();
+    ctx.ellipse(mx + mw/2, my + mh*0.72, mw*0.3, mh*0.26, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
   ctx.restore();
+}
+// hex rengi -0.16..+0.16 oranında karanlık/açıkla (doku için)
+function shade(hex, k){
+  const n = parseInt(hex.slice(1), 16);
+  const f = v => Math.max(0, Math.min(255, Math.round(v * (1 - k))));
+  return `rgb(${f(n>>16)},${f((n>>8)&255)},${f(n&255)})`;
 }
 function render(){
   ctx.clearRect(0,0,W,H);

@@ -51,6 +51,7 @@ pkill -f "server.py"
 | `Q` / `E` | Haritayı bir önceki / sonraki yap (döngü) |
 | `L` | Rakibin öğrenme hafızasını sıfırla |
 | Ekran altı butonlar | `SES AÇ/KAPAT` · `HAFIZAYI SIFIRLA` · harita seçimi |
+| `EXIT` butonu | Sunucuyu kapatır (`POST /shutdown`; onay sorar, beyin hafızası diskte kalır) |
 
 **Kazanma:** 7 sayıya ilk ulaşan kazanır.
 Raketinin neresine çarparsan top o açıyla döner (kenar = keskin açı, merkez = düz).
@@ -144,6 +145,8 @@ python3 selfplay.py 5
 - `GET /brain` — sağlık kontrolü.
 - `GET /ai_memory` — güncel öğrenme durumu.
 - `GET /clear_memory` — hafızayı sıfırla.
+- `POST /shutdown` — sunucuyu kapatır (oyun içi `EXIT` butonu bunu çağırır;
+  beyin hafızası diskte `ai_memory.json` olarak kalır).
 
 ---
 
