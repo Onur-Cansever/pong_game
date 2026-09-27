@@ -166,7 +166,7 @@ Sunucu `0.0.0.0:8077` dinlediği için **aynı ağdaki telefon/arkadaş**
 
 ### Seçenek 2 — Tek dosya EXE
 Aşağıdaki **Build Alma** bölümüne bak: bu makineden `./build-windows.sh`
-(wine ile) ya da Windows'ta `exe-yap.bat` ile `Pong.exe` üret, paylaş.
+(wine ile) `Pong-windows-x64.exe` üret, paylaş.
 
 ## 📦 Build Alma (Linux + Windows binary'si)
 
@@ -177,12 +177,11 @@ paylaşılabilir):
 | Script | Ne yapar | Nerede |
 |--------|----------|--------|
 | `./baslat.sh [port]` | Oyunu çalıştırır (Linux, Python gerekir) | Linux |
-| `./build.sh` | **Linux binary** → `dist/Pong` | Linux |
-| `./build-windows.sh` | **Windows `.exe`** → `dist-windows/Pong.exe` | bu Linux makinesi (wine) ya da Wine'lı herhangi bir makine |
-| `exe-yap.bat` | Windows `.exe` | Windows (yerel, PyInstaller) |
+| `./build-linux.sh` | **Linux binary** → `releases/Pong-linux-x86_64` | Linux |
+| `./build-windows.sh` | **Windows `.exe`** → `releases/Pong-windows-x64.exe` | bu Linux makinesi (wine) ya da Wine'lı herhangi bir makine |
 | `baslat.bat` | Oyunu çalıştırır | Windows |
 
-- `build.sh` kendi sanal ortamını (`.build-venv/`) kurar, PyInstaller'i ana
+- `build-linux.sh` kendi sanal ortamını (`.build-venv/`) kurar, PyInstaller'i ana
   Python'a dokunmadan oraya kurar; ilk çalıştırmada kendi kendini hazırlar.
 - `build-windows.sh` Linux'tan **cross-derleme** yapar: wine içine
   python.org'dan Windows Python kurar (ilk kez ~1-2 dk, sonra önbellek olur
@@ -191,30 +190,27 @@ paylaşılabilir):
   vardır: `git tag v1.0 && git push origin v1.0` → GitHub'ın kendi
   runner'larında **hem Linux hem Windows binary'si** derlenir ve
   **GitHub Release** varlığı olarak eklenir (binary repo'ya girmez).
-- Platform ayrımı: Linux binary'si sadece Linux x86_64, `Pong.exe` sadece
+- Çıktılar `releases/` dizinine gider; her build önce `releases/`'i temizler.
+  `releases/` dizini `.gitignore`'dadır — binary'ler repo'ya girmez.
+- Platform ayrımı: Linux binary'si sadece Linux x86_64, `.exe` sadece
   64-bit Windows'ta çalışır. (PyInstaller hedef OS'te derler.)
 
 Örnek:
 
 ```bash
-./build.sh           # Linux:  dist/Pong
-./build-windows.sh   # Windows: dist-windows/Pong.exe  (wine gerekir)
+./build-linux.sh    # -> releases/Pong-linux-x86_64
+./build-windows.sh  # -> releases/Pong-windows-x64.exe  (wine gerekir)
 ```
-
-### Eski/alternatif yol (Windows makinesinde)
-`exe-yap.bat` hâlâ çalışır: Windows makinesinde `pip install pyinstaller`
-yapar, `dist\Pong.exe` üretir (tek dosya — `brain.py` ayrı göndermen gerekmez;
-AI hafızası `Pong.exe`'nin yanına `ai_memory.json` olarak yazılır).
 
 ### EXE'de "not found" (404) çıkarsa
 Tarayıcıda `http://localhost:8077/` açıldığında `not found: /pong.html (aranan
 dizinler: ...)` görürsen, bu sunucunun **çalıştığının** kanıtıdır; `pong.html`
-içine gömülmemiş demektir. `exe-yap.bat` şu `--add-data` satırlarını içerir:
-```bat
+içine gömülmemiş demektir. `build-windows.sh` şu `--add-data` satırlarını içerir:
+```
 --add-data "pong.html;." --add-data "terminator_music.webm;."
 ```
 Bu iki satırı silip exe'yi yeniden derle (veya `pong.html` + `terminator_music.webm`
-dosyalarını `Pong.exe`'nin yanına koy). Ayrıca tarayıcı adres çubuğunda
+dosyalarını `Pong-windows-x64.exe`'in yanına koy). Ayrıca tarayıcı adres çubuğunda
 `http://localhost:8077/pong.html` ile de deneyebilirsin — doğrudan dosya
 yoluyla 200 alıyorsan sorun `--add-data`'dır; almıyorsan exe içinde `pong.html`
 yok demektir.
@@ -223,11 +219,11 @@ yok demektir.
 > (Windows `.exe`'i Windows'ta, Linux binary'si Linux'ta). `build-windows.sh`
 > bu yüzden wine içine Windows Python kurup PyInstaller'i wine'da çalıştırır
 > (ilk kurulum ~1-2 dk); wine yoksa GitHub workflow'u (`.github/workflows/release.yml`)
-> Windows runner'ında derler. Oluşan `Pong.exe`'yi paylaşabilirsin.
+> Windows runner'ında derler. Oluşan `Pong-windows-x64.exe`'i paylaşabilirsin.
 
 ### Paylaşım ipuçları
 - **En kolayı:** repo klasörünü ZIP'le, arkadaşın indirsin → Python kuru → `baslat.bat` / `./baslat.sh`.
-- **Hazır binary:** `./build.sh` (Linux) + `./build-windows.sh` (Windows exe) →
-  çıktıları GitHub Release'e ekle ya da ZIP'le paylaş.
+- **Hazır binary:** `./build-linux.sh` + `./build-windows.sh` → çıktılar
+  `releases/` dizininde birikir; GitHub Release'e ekle ya da ZIP'le paylaş.
 - İki taraf da `ai_memory.json` üretir; bu dosya `.gitignore`'da olduğu için
   her kurulum "temiz beyinle" başlar (öğrenme makineye özel kalır).

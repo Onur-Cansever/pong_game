@@ -15,12 +15,16 @@ server.log
 .env
 .venv/
 
-# PyInstaller çıktıları
+# PyInstaller ciktilari
 build/
+build-linux/
 build-windows/
 dist/
 dist-windows/
 *.spec
 
-# build.sh venv'i
+# build ciktilari (binary'ler repo'ya girmesin)
+releases/
+
+# build venv'i
 .build-venv/
