@@ -150,7 +150,7 @@ python3 selfplay.py 5
 
 ---
 
-## 🪟 Windows'ta Çalıştırma / EXE Üretme
+## 🪟 Windows'ta Çalıştırma
 
 Oyun tarayıcı tabanlıdır; `.exe`'ye dönüştürmek zorunlu değildir. İki seçenek:
 
@@ -164,18 +164,47 @@ Bu, `python3 server.py` çalıştırıp tarayıcıyı otomatik açar.
 Sunucu `0.0.0.0:8077` dinlediği için **aynı ağdaki telefon/arkadaş**
 `http://<Windows-PC-IP>:8077` ile katılabilir.
 
-### Seçenek 2 — Tek dosya EXE (PyInstaller)
-Arkadaşlara "çift tıkla" dosyası vereceksen:
-1. Windows makinesinde `pip install pyinstaller`
-2. Bu klasörde `exe-yap.bat` çalıştır (veya terminalde):
-   ```bat
-   pyinstaller --onefile --noconsole --name Pong --hidden-import brain ^
-       --add-data "pong.html;." --add-data "terminator_music.webm;." server.py
-   ```
-3. Çıktı **`dist\Pong.exe`** olur (tek dosya — `brain.py` ayrı göndermen gerekmez).
-   Bu exe'yi arkadaşlarına gönder; çift tıklayınca sunucu başlar, tarayıcı
-   `http://localhost:8077/` açılır. AI hafızası `Pong.exe`'nin yanına
-   `ai_memory.json` olarak yazılır.
+### Seçenek 2 — Tek dosya EXE
+Aşağıdaki **Build Alma** bölümüne bak: bu makineden `./build-windows.sh`
+(wine ile) ya da Windows'ta `exe-yap.bat` ile `Pong.exe` üret, paylaş.
+
+## 📦 Build Alma (Linux + Windows binary'si)
+
+Oyun tarayıcı tabanlıdır; ama tek dosyalık derlenebilir binary üretmek için
+scriptler hazırdır (çıktılar repo'ya girmeden, GitHub Release olarak da
+paylaşılabilir):
+
+| Script | Ne yapar | Nerede |
+|--------|----------|--------|
+| `./baslat.sh [port]` | Oyunu çalıştırır (Linux, Python gerekir) | Linux |
+| `./build.sh` | **Linux binary** → `dist/Pong` | Linux |
+| `./build-windows.sh` | **Windows `.exe`** → `dist-windows/Pong.exe` | bu Linux makinesi (wine) ya da Wine'lı herhangi bir makine |
+| `exe-yap.bat` | Windows `.exe` | Windows (yerel, PyInstaller) |
+| `baslat.bat` | Oyunu çalıştırır | Windows |
+
+- `build.sh` kendi sanal ortamını (`.build-venv/`) kurar, PyInstaller'i ana
+  Python'a dokunmadan oraya kurar; ilk çalıştırmada kendi kendini hazırlar.
+- `build-windows.sh` Linux'tan **cross-derleme** yapar: wine içine
+  python.org'dan Windows Python kurar (ilk kez ~1-2 dk, sonra önbellek olur
+  `~/.wine-pong`), PyInstaller'i wine'da çalıştırır. Gereksinim: `wine`.
+  Windows makinesi yok, wine'ın da olmadığı ortamlar için `.github/workflows/release.yml`
+  vardır: `git tag v1.0 && git push origin v1.0` → GitHub'ın kendi
+  runner'larında **hem Linux hem Windows binary'si** derlenir ve
+  **GitHub Release** varlığı olarak eklenir (binary repo'ya girmez).
+- Platform ayrımı: Linux binary'si sadece Linux x86_64, `Pong.exe` sadece
+  64-bit Windows'ta çalışır. (PyInstaller hedef OS'te derler.)
+
+Örnek:
+
+```bash
+./build.sh           # Linux:  dist/Pong
+./build-windows.sh   # Windows: dist-windows/Pong.exe  (wine gerekir)
+```
+
+### Eski/alternatif yol (Windows makinesinde)
+`exe-yap.bat` hâlâ çalışır: Windows makinesinde `pip install pyinstaller`
+yapar, `dist\Pong.exe` üretir (tek dosya — `brain.py` ayrı göndermen gerekmez;
+AI hafızası `Pong.exe`'nin yanına `ai_memory.json` olarak yazılır).
 
 ### EXE'de "not found" (404) çıkarsa
 Tarayıcıda `http://localhost:8077/` açıldığında `not found: /pong.html (aranan
@@ -190,14 +219,15 @@ dosyalarını `Pong.exe`'nin yanına koy). Ayrıca tarayıcı adres çubuğunda
 yoluyla 200 alıyorsan sorun `--add-data`'dır; almıyorsan exe içinde `pong.html`
 yok demektir.
 
-> **Neden exe bu Linux sunucudan verilmedi?** PyInstaller hedef OS'te derler
-> (Windows `.exe`'i Windows'ta, Linux `.bin`'i Linux'ta). Bu makine Linux olduğu
-> için Windows `.exe`'i burada üretilmez; yukarıdaki `exe-yap.bat` bu yüzden
-> *Windows makinesinde* çalıştırılır. Oluşan `Pong.exe`'yi buraya geri koyabilir,
-> arkadaşlarınla paylaşabilirsin.
+> **Neden exe bu Linux makinesinden verilmedi?** PyInstaller hedef OS'te derler
+> (Windows `.exe`'i Windows'ta, Linux binary'si Linux'ta). `build-windows.sh`
+> bu yüzden wine içine Windows Python kurup PyInstaller'i wine'da çalıştırır
+> (ilk kurulum ~1-2 dk); wine yoksa GitHub workflow'u (`.github/workflows/release.yml`)
+> Windows runner'ında derler. Oluşan `Pong.exe`'yi paylaşabilirsin.
 
 ### Paylaşım ipuçları
-- **En kolayı:** repo klasörünü ZIP'le, arkadaşın indirsin → Python kuru → `baslat.bat`.
-- **EXE'ye dönüştür:** `exe-yap.bat` → `dist\Pong.exe`'yi ZIP'le paylaş.
+- **En kolayı:** repo klasörünü ZIP'le, arkadaşın indirsin → Python kuru → `baslat.bat` / `./baslat.sh`.
+- **Hazır binary:** `./build.sh` (Linux) + `./build-windows.sh` (Windows exe) →
+  çıktıları GitHub Release'e ekle ya da ZIP'le paylaş.
 - İki taraf da `ai_memory.json` üretir; bu dosya `.gitignore`'da olduğu için
   her kurulum "temiz beyinle" başlar (öğrenme makineye özel kalır).

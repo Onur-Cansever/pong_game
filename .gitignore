@@ -15,7 +15,12 @@ server.log
 .env
 .venv/
 
-# PyInstaller çıktıları (exe-yap.bat çalıştırınca oluşur; Windows makinesinde)
+# PyInstaller çıktıları
 build/
+build-windows/
 dist/
+dist-windows/
 *.spec
+
+# build.sh venv'i
+.build-venv/

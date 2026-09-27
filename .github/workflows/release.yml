@@ -1,0 +1,66 @@
+name: Release
+
+# Tag push edildiğinde (örn. git tag v1.0 && git push origin v1.0)
+# hem Linux hem Windows binary'sini derleyip GitHub Release'e ekler.
+# (Binary'ler repo'ya DEĞİL, release varlıklarına girer.)
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      # PyInstaller verici ayacı platforma göre: ":" (Linux) / ";" (Windows)
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: >
+          pyinstaller --onefile --name Pong --hidden-import brain
+          --add-data "pong.html:." --add-data "terminator_music.webm:."
+          --distpath dist server.py
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: >
+          pyinstaller --onefile --noconsole --name Pong --hidden-import brain
+          --add-data "pong.html;." --add-data "terminator_music.webm;."
+          --distpath dist server.py
+
+      - name: Adlandır (Pong-linux-x86_64 / Pong-windows-x64.zip)
+        shell: bash
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            cp dist/Pong "Pong-linux-x86_64-${VER}"
+            chmod +x "Pong-linux-x86_64-${VER}"
+            ls -la "Pong-linux-x86_64-${VER}"
+          else
+            (cd dist && zip -r ../Pong-windows-x64-${VER}.zip Pong.exe)
+            ls -la "Pong-windows-x64-${VER}.zip"
+          fi
+
+      - name: Release varlığı olarak yükle
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Pong-linux-x86_64-*
+            Pong-windows-x64-*.zip
+          generate_release_notes: true
